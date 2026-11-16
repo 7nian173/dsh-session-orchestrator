@@ -1,0 +1,34 @@
+{
+  "name": "dsh-session-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "File-queue session bridge for DeepSeek Harness: deliver prompts between sessions, wake idle ones, orchestrate workspace/stage sessions, and queue one-shot UI navigation.",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "session",
+    "cross-session",
+    "orchestration",
+    "file-queue"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CHANGE_ME/dsh-session-bridge.git"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.19.0"
+  }
+}
