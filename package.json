@@ -1,11 +1,12 @@
 {
-  "name": "dsh-session-bridge",
+  "name": "dsh-session-orchestrator",
   "version": "0.1.0",
-  "description": "File-queue session bridge for DeepSeek Harness: deliver prompts between sessions, wake idle ones, orchestrate workspace/stage sessions, and queue one-shot UI navigation.",
+  "description": "Session orchestration for DeepSeek Harness in one bundle: a file queue another process can drive, workspace/stage session creation, cross-session delivery, and one-shot UI navigation. Host half plus browser half.",
   "type": "module",
   "main": "lib/index.js",
   "files": [
     "lib/index.js",
+    "lib/client.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -14,19 +15,27 @@
     "deepseek-harness",
     "dsh",
     "session",
-    "cross-session",
     "orchestration",
-    "file-queue"
+    "cross-session",
+    "file-queue",
+    "navigation"
   ],
   "license": "MIT",
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
     }
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/CHANGE_ME/dsh-session-bridge.git"
+    "url": "git+https://github.com/heartmove/dsh-session-orchestrator.git"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "~3.19.0"
@@ -36,6 +45,7 @@
   },
   "exports": {
     ".": "./lib/index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   }
 }

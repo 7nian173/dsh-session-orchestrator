@@ -2,7 +2,7 @@
 # 队列根目录默认 $DSH_HOME/session-bridge；改成工作区内目录即可纳入版本控制。
 - insert:
     - id: session-bridge
-      name: dsh-session-bridge
+      name: dsh-session-orchestrator
       config:
         pollMs: 1000
         replyTimeoutMs: 180000
