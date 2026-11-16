@@ -1,12 +1,13 @@
 {
   "name": "dsh-session-orchestrator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Session orchestration for DeepSeek Harness in one bundle: a file queue another process can drive, workspace/stage session creation, cross-session delivery, and one-shot UI navigation. Host half plus browser half.",
   "type": "module",
   "main": "lib/index.js",
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/mail.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
