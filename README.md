@@ -1,5 +1,7 @@
 # dsh-session-bridge
 
+> 中文版：[README.zh.md](./README.zh.md)
+
 A file-queue bridge **and a workspace mailbox** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) sessions.
 Everything runs inside the Host process: no shell, no HTTP auth, no network listener of its own.
 
