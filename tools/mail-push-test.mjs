@@ -62,36 +62,108 @@ const ghost = createMailbox({ ackTimeoutMs: 1000, service: () => undefined, log:
 const r2 = await ghost.send({ owner: 'a', peer: 'b', type: 'S-PROGRESS', body: 'x' })
 check('未注册工作区不建箱', r2.ok === true && !(await readdir(wsGhost)).includes('.dsh-mail'), JSON.stringify(r2.status))
 
-// ── 哨兵：忙 → 等 idle 边；空闲 → 10 秒窗口；10s 内转忙 → 放弃并缩到 5s
-// 用长 ACK 窗口的独立实例，避免 1 秒 ackTimeout 先把它打成待办
-const box2 = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? controller : undefined), log: () => {}, cwdOf })
-let busy = true
-controller.state = async () => ({ running: busy, active: busy })
-const s2 = await box2.send({ owner: 'lead', peer: 'peer', type: 'S-PROGRESS', body: 'busy case', senderSessionId: 'session-from', peerSessionId: 'session-to', mailId: 'M-20261117-9001' })
-const id2 = s2.mailId
-const ledBusy = await readJson(join(wsTo, '.dsh-mail', '_ledger.json'))
-const notes2 = ((ledBusy.events || []).filter((e) => e.mail_id === id2 && e.note)).map((e) => e.note)
-check('忙目标 → wait-idle', notes2.includes('sentinel:wait-idle'), JSON.stringify(notes2))
+// ── 信使通道（v0.2）：背压 / 忙则排队 / 忙久转待办 / 空闲报数再逐封 / 暂停 / 重启续排
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const wsCh = join(tmp, 'ws-ch')
+await ensureWorkspaceBox(wsCh)
+const cwdCh = async (sid) => (typeof sid === 'string' && sid.startsWith('S') ? wsCh : undefined)
+let busy2 = false
+const chCalls = []
+const chController = {
+  async prompt(req, signal) {
+    if (!signal) throw new Error('signal missing')
+    chCalls.push({ id: String(req.requestId), sessionId: req.sessionId, text: (req.content && req.content[0] && req.content[0].text) || '' })
+    return { ok: true }
+  },
+  async state() { return { running: busy2, active: busy2 } },
+}
+const chBox = createMailbox({
+  ackTimeoutMs: 600000,
+  service: (k) => (k === 'sessionController' ? chController : undefined),
+  log: () => {},
+  cwdOf: cwdCh,
+  courier: { intervalMs: 5, busyHoldMs: 50, staleAfterMs: 200, digestGapMs: 0 },
+})
+const chMail = (owner, peer, from, to, id, type = 'S-PROGRESS', extra = {}) => ({ owner, peer, type, body: 'x', senderSessionId: from, peerSessionId: to, mailId: id, ...extra })
+const chA = await chBox.send(chMail('A', 'B', 'S1', 'S2', 'M-20261117-8001'))
+check('首封放行', chA.ok === true && chA.status === 'pushed', JSON.stringify(chA.status))
+const chB = await chBox.send(chMail('A', 'B', 'S1', 'S2', 'M-20261117-8002'))
+check('背压：未结案不许再发', chB.ok === false && chB.error.code === 'PAIR_OUTSTANDING', JSON.stringify(chB.error && chB.error.code))
+const chAck = await chBox.send(chMail('A', 'B', 'S1', 'S2', 'M-20261117-8003', 'S-ACK', { ackOf: 'M-20261117-8001' }))
+check('S-ACK 豁免背压', chAck.ok === true, JSON.stringify(chAck.error && chAck.error.code))
 
-busy = false
-await box2.noteStatus({ id: 'session-to' }, 'idle')
-const ledArmed = await readJson(join(wsTo, '.dsh-mail', '_ledger.json'))
-const armed = ((ledArmed.events || []).filter((e) => e.mail_id === id2 && e.note === 'sentinel:armed')).pop()
-check('idle 边 → 10 秒窗口', armed && armed.delayMs === 10000, JSON.stringify(armed || null))
+busy2 = true
+const chHeld1 = await chBox.send(chMail('C', 'D', 'S3', 'S4', 'M-20261117-8011'))
+const chHeld2 = await chBox.send(chMail('E', 'D', 'S5', 'S4', 'M-20261117-8012'))
+check('目标忙 → 不投卡，先入通道', chHeld1.push.queued === false && chHeld2.push.queued === false, JSON.stringify([chHeld1.push, chHeld2.push]))
+check('忙时不产生提醒卡', chCalls.every((call) => !/〔信箱·M-20261117-801[12]〕/.test(call.text)), JSON.stringify(chCalls.map((call) => call.id)))
+await sleep(120)
+const envCh = await readFile(join(wsCh, '.dsh-mail', 'envelope', 'M-20261117-8011.to.md'), 'utf8')
+check('忙太久 → 待办信封 paused: true', /^status: 待办$/m.test(envCh) && /^paused: true$/m.test(envCh), envCh.split('\n').slice(0, 12).join(' | '))
+const cj = await readJson(join(wsCh, '.dsh-mail', '_courier.json'))
+check('持有队列落盘', Array.isArray(cj.items) && cj.items.some((item) => item.mailId === 'M-20261117-8011' && item.state === 'held'), JSON.stringify(cj.items.map((item) => [item.mailId, item.state])))
 
-busy = true
-await box2.noteStatus({ id: 'session-to' }, 'running')
-const ledAbort = await readJson(join(wsTo, '.dsh-mail', '_ledger.json'))
-const abort = ((ledAbort.events || []).filter((e) => e.mail_id === id2 && e.note === 'sentinel:abort-busy')).pop()
-check('转忙 → 放弃并缩到 5s', abort && abort.nextDelayMs === 5000, JSON.stringify(abort || null))
+busy2 = false
+const before = chCalls.length
+await chBox.noteStatus({ id: 'S4' }, 'idle')
+await sleep(90)
+const chAfter = chCalls.slice(before).filter((call) => call.sessionId === 'S4')
+check('空闲 → 先报数', chAfter.length >= 1 && /封没处理/.test(chAfter[0].text), JSON.stringify(chAfter.slice(0, 1).map((call) => call.text.slice(0, 40))))
+check('逐封：先只递一封', chAfter.filter((call) => /〔信箱·待收〕/.test(call.text)).length === 1, JSON.stringify(chAfter.map((call) => call.text.slice(0, 16))))
+const s4Cards = () => chCalls.filter((call) => call.sessionId === 'S4' && /〔信箱·待收〕/.test(call.text)).length
+const stillOne = s4Cards()
+await sleep(70)
+check('上一张没被消费 → 不发下一张', s4Cards() === stillOne, String(s4Cards()))
 
-busy = false
-await box2.noteStatus({ id: 'session-to' }, 'idle')
-await new Promise((r) => setTimeout(r, 5600))
-const notices = calls.filter((c) => String(c.id).startsWith('mail-' + id2))
-check('5 秒到点推索引通知', notices.length >= 2, JSON.stringify(notices))
-const ledNotified = await readJson(join(wsTo, '.dsh-mail', '_ledger.json'))
-check('留痕有 notified', ((ledNotified.events || []).some((e) => e.mail_id === id2 && e.note === 'sentinel:notified')), '')
+await chBox.noteStep({ id: 'S4' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261117-8011〕 收到' }] }])
+await sleep(90)
+check('上一张被消费 → 递下一封', s4Cards() === stillOne + 1, String(s4Cards()))
+
+await chBox.pause({ do: 'pause', cwd: wsCh })
+const beforePause = chCalls.length
+const pausedSend = await chBox.send(chMail('F', 'G', 'S6', 'S7', 'M-20261117-8022'))
+check('暂停：只入队不投', pausedSend.push.queued === false && pausedSend.push.reason === 'channel-paused', JSON.stringify(pausedSend.push))
+await sleep(80)
+check('暂停期间不投递', chCalls.length === beforePause, String(chCalls.length - beforePause))
+const pauseStatus = await chBox.pause({ do: 'status', cwd: wsCh })
+check('暂停状态可查且报积压', pauseStatus.paused === true && pauseStatus.pending >= 1, JSON.stringify({ paused: pauseStatus.paused, pending: pauseStatus.pending }))
+const chStatus = await chBox.status({ mailId: 'M-20261117-8012' })
+check('mail_status 带通道队列', chStatus.queue && chStatus.queue.paused === true && chStatus.queue.pending >= 1, JSON.stringify(chStatus.queue))
+
+await chBox.pause({ do: 'resume', cwd: wsCh })
+await sleep(120)
+check('恢复后继续投递', chCalls.length > beforePause, String(chCalls.length - beforePause))
+
+// 重启续排：独立工作区里排一条待投，新实例从 _courier.json 续上
+const wsCh2 = join(tmp, 'ws-ch2')
+await ensureWorkspaceBox(wsCh2)
+const cwdCh2 = async (sid) => (typeof sid === 'string' && sid.startsWith('R') ? wsCh2 : undefined)
+let busy3 = true
+const restartCalls = []
+const mkRestartController = () => ({
+  async prompt(req, signal) {
+    if (!signal) throw new Error('signal missing')
+    restartCalls.push({ id: String(req.requestId), sessionId: req.sessionId, text: (req.content && req.content[0] && req.content[0].text) || '' })
+    return { ok: true }
+  },
+  async state() { return { running: busy3, active: busy3 } },
+})
+const firstLife = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? mkRestartController() : undefined), log: () => {}, cwdOf: cwdCh2, cwds: async () => [wsCh2], courier: { intervalMs: 5, busyHoldMs: 50, staleAfterMs: 400, digestGapMs: 0 } })
+const queuedOnce = await firstLife.send({ owner: 'H', peer: 'I', type: 'S-PROGRESS', body: 'x', senderSessionId: 'R1', peerSessionId: 'R2', mailId: 'M-20261117-8031' })
+check('重启前：忙则只入队', queuedOnce.push.queued === false && restartCalls.length === 0, JSON.stringify(queuedOnce.push))
+await firstLife.pause({ do: 'pause', cwd: wsCh2 })
+busy3 = false
+await sleep(60)
+const cjBefore = await readJson(join(wsCh2, '.dsh-mail', '_courier.json'))
+const queuedBefore = (cjBefore.items || []).filter((item) => item.state === 'queued' || item.state === 'held').length
+check('重启前：条目已落盘', queuedBefore >= 1, JSON.stringify(cjBefore.items.map((item) => item.state)))
+
+// 新进程 = 新实例，只读磁盘；先不暂停，验证真的会续投
+const secondLife = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? mkRestartController() : undefined), log: () => {}, cwdOf: cwdCh2, cwds: async () => [wsCh2], courier: { intervalMs: 5, busyHoldMs: 50, staleAfterMs: 400, digestGapMs: 0 } })
+await secondLife.pause({ do: 'resume', cwd: wsCh2 })
+await secondLife.sweepAtStart()
+await sleep(140)
+check('新实例从 _courier.json 续排', restartCalls.length >= 1 && /〔信箱·/.test(restartCalls[0].text), JSON.stringify(restartCalls.map((call) => call.text.slice(0, 20))))
 
 // ── 群路由：阈值 3 自动建群 + 交集合并
 const gb = createMailbox({ ackTimeoutMs: 600000, service: () => undefined, log: () => {}, cwdOf: async () => wsTo })
@@ -99,7 +171,9 @@ let gid = 0
 const pairSend = async (a, b, times) => {
   for (let i = 0; i < times; i++) {
     gid += 1
-    await gb.send({ owner: a, peer: b, type: 'S-PROGRESS', body: 'x', senderSessionId: a, peerSessionId: b, mailId: 'M-20261117-9' + String(gid).padStart(3, '0') })
+    const sent = await gb.send({ owner: a, peer: b, type: 'S-PROGRESS', body: 'x', senderSessionId: a, peerSessionId: b, mailId: 'M-20261117-9' + String(gid).padStart(3, '0') })
+    // v0.2 背压：同一对未结案的信最多一封，往返要真的回执
+    if (sent && sent.ok) await gb.ack({ mailId: sent.mailId })
   }
 }
 await pairSend('A1', 'B1', 3)

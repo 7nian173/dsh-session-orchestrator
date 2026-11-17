@@ -117,6 +117,10 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `childNamePrefix` | `agent-` | 建会话自动注册时的名字前缀 |
 | `taskChannelTtlMs` | `86400000` | 创建者与新会话之间专用通道的存活时长 |
 | `taskChannelIdleMs` | `600000` | 群内信件全部落定后静默多久回收该通道 |
+| `courierIntervalMs` | `5000` | 信使通道两条提醒之间的间隔 |
+| `busyHoldMs` | `180000` | 目标一直在任务中超过这么久，信转待办 |
+| `staleAfterMs` | `1800000` | 信封静置超过这么久，允许补一次催收 |
+| `digestGapMs` | `600000` | 发信方摘要数字没变时的最小重发间隔 |
 
 ## 两条入口
 
@@ -135,11 +139,11 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 <root>/heartbeat.json         心跳（heartbeat）      存活时间戳
 ```
 
-可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_group`。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
+可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
 
 ### 模型工具，给 Agent
 
-共 11 个。
+共 12 个。
 
 | 工具 | 用途 |
 |---|---|
@@ -152,7 +156,8 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `mail_send` | 写信 |
 | `mail_ack` | 回执，带 close 表示结案 |
 | `mail_list` | 按 owner 列出信件 |
-| `mail_status` | 看某一封走过的路径、所属群、是否逾期 |
+| `mail_status` | 看某一封走过的路径、所属群、是否逾期、通道积压 |
+| `mail_pause` | 暂停或恢复信使通道，查通道积压 |
 | `mail_group` | 建群、列群，或取本工作区候选会话 |
 
 ## 信件怎么流转
@@ -166,6 +171,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
     _index.json                  路径索引：每封信每一侧的字母序列
     _ledger.json                 事件留痕：只追加，不修改
     group.json                   群路由表：群成员与专用通道
+    _courier.json                信使通道：排队条目、暂停开关、摘要去重
 ```
 
 状态、目录、字母三者对应关系固定：
@@ -180,7 +186,33 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 路径只追加不回退。发信方通常走 `A>R>D`，收信方走 `P>R>D`；中途卡住会看到 `A>B` 这样的分支。
 
-投递本身只送三行索引，正文留在信封文件里。对方读过并回执之后，索引才从已接收变处理中。超过 `ackTimeoutMs` 还没有回执，两侧同时收到待办通知。
+投递本身只送三行索引，正文留在信封文件里。对方读过并回执之后，索引才从已接收变处理中。
+
+### 待办、信使与背压
+
+一封信超过 `ackTimeoutMs` 还没拿到回执就转 `B` 待办。这时不再向两侧各撒一张卡，而是交给信使通道。
+
+通道是 `<工作区>/.dsh-mail/_courier.json`，全局一条，一条一条投，投完等 `courierIntervalMs`（默认 5 秒）再取下一条；重启后从文件接着投。
+
+三条规矩。
+
+| 规矩 | 值 | 为什么 |
+|---|---|---|
+| 同一会话在途 | 最多 1 张未消费的卡 | 目标一次只跑一轮，多塞的卡只是占位 |
+| 同一对未结案 | 最多 1 封 | 上一封没回执就不许再发；`S-ACK`、`S-TODO-NOTICE` 豁免 |
+| 单封催收 | 最多 2 次 | 首次一次，看门狗补一次 |
+
+提醒分两个形态，收信方和发信方看到的不是同一张卡。
+
+```
+（收信方）〔信箱·待收〕M-20261117-0031
+（发信方）〔信使〕你名下现在 5 封待办：lead 3 封、peer 2 封，最早 41 分钟前。
+         不是对方不理你，是信没被消费或没拿到回执，别等。
+```
+
+目标一直在任务里不空闲，信就留在持有队列（`held`），信封头写 `paused: true`。等目标回到空闲，通道先报数（「你有 N 封没处理」），再一封一封递：上一封被消费了才递下一封。信封静置超过 `staleAfterMs`（默认 30 分钟）仍没人动，才允许补一次催收。
+
+要临时全停，用 `mail_pause`（`do: pause | resume | status`）。暂停状态落盘，重启保持。
 
 同一对人来回超过阈值（默认 3 封）会自动结群，有交集的两个群会合并成一个。建会话时开的那条专用通道是另一回事，它带 `scope=task`，不参与合并，成员会话归档、TTL 到期、或者群内信件全部落定后静默十分钟，就退休并在留痕里记一笔。
 
@@ -189,7 +221,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 在仓库根目录跑，只需要 Node，不需要装依赖。
 
 ```
-node tools/mail-push-test.mjs            # 推送、哨兵、群、工作区信箱，34 项
+node tools/mail-push-test.mjs            # 推送、通道、背压、群、工作区信箱，48 项
 node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json，先加 --dry-run
 ```
 
@@ -205,6 +237,8 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 **回执里写着 `UNRESOLVED`**。你给的名字既不是登记名，也对不上任何会话标题。返回体里带了本工作区的候选列表，从里面挑一个再发。
 
+**回执里写着 `PAIR_OUTSTANDING`**。同一对角色上一封还没结案，回执里带了那封的 id 和状态。等它回执，或者先用 `mail_pause` 看看通道积压；`S-ACK` 和 `S-TODO-NOTICE` 不受这条限制。
+
 **回执里写着 `SENDER_NOT_REGISTERED`**。你带了 `senderSessionId`，但这个身份没有登记过。要么先登记，要么把这个字段去掉。这是有意为之的限制，不是漏判。
 
 **回执里写着 `owned by subagent routing`**。你选的目标是个子 agent 会话，宿主不接受对它的推送。换成它的父会话，或者让父会话帮忙转一下。
@@ -217,7 +251,11 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 **对方上下文里没出现卡片**。先看 `mail_status` 里的 `toPath`。如果有 `P`，说明信落在文件里了，只是没推到对方上下文。再看发信回执里的 `push.via`，是 `prompt` 就说明 `schedule` 服务不可用，退化成了普通投递。
 
-**一直停在 `P`**。对方读过之前会一直是这样。超过 `ackTimeoutMs` 没有回执就转成 `B`，那时候两侧都会收到待办通知。
+**一直停在 `P`**。对方读过之前会一直是这样。超过 `ackTimeoutMs` 没有回执就转成 `B`，信交给信使通道。
+
+**转 `B` 之后对方还是没动静**。看 `mail_status` 返回的 `queue`：`held` 说明对方一直在任务里，通道没投；`paused` 是有人按了暂停。用 `mail_pause` 的 `do: status` 能看到积压条数与最早一条等了多久。
+
+**发信方一直没等到回执，以为对方不理他**。看通道给发信方那张摘要卡（`〔信使〕…`），它按发信方聚合，数字没变不会重复发。
 
 **对方说没收到**。让对方去看自己工作区的信件本体目录（`.dsh-mail/envelope/`）。文件在就说明信已经落地，只是没进他的上下文。
 

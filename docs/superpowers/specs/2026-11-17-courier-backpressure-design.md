@@ -44,8 +44,9 @@ pending → pushed → delivered → acked → done
 ```
 
 - `held`（待办，目录 B）：目标忙或超时未消费，信被通道接管，卡片停投。信封头 `paused: true`。
-- `held` **可重开**：目标回到空闲后，通道从持有队列取出，路径追加一段 `B>P>R>D`。这是与 v6 的唯一状态语义变更，需要写进 README 的字母表说明。
-- 路径只追加，不重写；重开后 `path` 形如 `A>B>P`。
+- `held` **可重开**：目标回到空闲后，通道从持有队列取出，重新投递一次。
+- 重开**不新增字母**：两侧在对方消费前后都仍算 `B`，回执到了才变 `R`，所以路径是 `A>B>R>D` / `P>B>R>D`，不会出现 `A>B>A` 这种噪声。
+- 重开记录在信封 `paused: false` 与 `_ledger.json` 的 `courier:reopen` 里，字母表保持五个。
 
 ### 4.2 通道条目
 
@@ -69,7 +70,7 @@ pending → pushed → delivered → acked → done
 
 **I1 背压。** 对 (from, to) 这一对，只要有一封处于 `pending | pushed | delivered`（未结案且未被通道接管），`mail_send` 拒绝，返回 `PAIR_OUTSTANDING`，带上那封的 mail_id、状态、已等多久。豁免 `S-ACK` 与 `S-TODO-NOTICE`：它们是对已有信的动作，不该被自己挡。
 
-> 待定决策：进入 `held` 之后是否仍挡。本规格取「放行但要告知」：held 说明这封已经处理不了，此时再挡等于封死发信方。放行时回执带 `prior: {mailId, status: "held", heldMinutes: N}`，并触发形态 B 摘要。若人类要求严格封锁，改成 `PAIR_BLOCKED`。
+> **决策（2026-11-17）：放行。** 进入 `held` 之后不挡新信，但回执里带 `prior: {mailId, status: "held", heldMinutes: N}`，并触发形态 B 摘要。理由：held 说明这封已经处理不了，此时再挡等于封死发信方。
 
 **I2 在途 ≤ 1。** 同一目标会话，未被消费（`deliveredAt` 为空）的信箱卡最多 1 张。上一张被消费后才发下一张。这是「LLM 单线」的直接结论：多推的卡只是占位，不会加速。
 
@@ -142,7 +143,7 @@ queue_seq: 12
 - 目标会话归档：条目直接 `dropped`，信转 `blocked`，`reason: target-archived`。
 - 条目超过 24 小时仍未投出：`dropped`，留痕。
 
-## 12. 测试断言（在现有 34 条之上新增）
+## 12. 测试断言（34 → 48 条，已实现）
 
 1. 同对未结案时 `mail_send` 返回 `PAIR_OUTSTANDING`
 2. `S-ACK` / `S-TODO-NOTICE` 不被背压挡住
@@ -154,6 +155,8 @@ queue_seq: 12
 8. `paused: true` 时 drain 不投
 9. 新实例从 `_courier.json` 恢复 `queued` 条目
 10. 好友表 `state` 反映 running / idle
+
+> 实际结果：原有 34 条里 8 条按新语义重写（哨兵改成通道），新增 14 条，合计 48 条全绿。
 
 ## 13. 兼容
 

@@ -117,6 +117,10 @@ It does not work for the desktop profile, which Electron manages exclusively and
 | `childNamePrefix` | `agent-` | Name prefix used when a new session registers automatically |
 | `taskChannelTtlMs` | `86400000` | Lifetime of the dedicated channel between creator and child |
 | `taskChannelIdleMs` | `600000` | Idle time before a channel whose letters all settled is retired |
+| `courierIntervalMs` | `5000` | Gap between two courier notice deliveries |
+| `busyHoldMs` | `180000` | Time a target may stay busy before an undelivered letter is held |
+| `staleAfterMs` | `1800000` | Time an envelope may sit untouched before one extra nudge |
+| `digestGapMs` | `600000` | Minimum gap between two sender digests while the count is unchanged |
 
 ## Two entry points
 
@@ -135,7 +139,7 @@ No login state, no listening port. Drop JSON into one directory, read the result
 <root>/heartbeat.json         heartbeat           liveness timestamp
 ```
 
-Available actions are `deliver`, `sessions`, `events`, `init_workspace`, `handoff`, `notify`, `relay`, `list_children`, `jump`, `delete_workspace`, and `probe_workspace_stream`; mailbox actions are `mail_send`, `mail_ack`, `mail_list`, `mail_status`, and `mail_group`. One id is never processed twice, so retrying with the same id returns the first result.
+Available actions are `deliver`, `sessions`, `events`, `init_workspace`, `handoff`, `notify`, `relay`, `list_children`, `jump`, `delete_workspace`, and `probe_workspace_stream`; mailbox actions are `mail_send`, `mail_ack`, `mail_list`, `mail_status`, `mail_pause`, and `mail_group`. One id is never processed twice, so retrying with the same id returns the first result.
 
 ### Model tools, for agents
 
@@ -152,7 +156,8 @@ Eleven in total.
 | `mail_send` | Write a letter |
 | `mail_ack` | Acknowledge a letter; `close` settles it |
 | `mail_list` | List letters by owner |
-| `mail_status` | Path taken, owning group, overdue flag for one letter |
+| `mail_status` | Path taken, owning group, overdue flag, channel backlog for one letter |
+| `mail_pause` | Pause or resume the courier channel, or report its backlog |
 | `mail_group` | Create or list groups, or fetch workspace candidates |
 
 ## How a letter travels
@@ -166,6 +171,7 @@ The mailbox lives inside the workspace, one set per workspace.
     _index.json                   path index: the letter sequence for each side
     _ledger.json                  event trail: append-only, never rewritten
     group.json                    group table: members and dedicated channels
+    _courier.json                 courier channel: queued items, pause flag, digest dedupe
 ```
 
 State, directory, and letter map to each other in a fixed way.
@@ -180,7 +186,33 @@ State, directory, and letter map to each other in a fixed way.
 
 Paths only append. The sender typically walks `A>R>D` and the receiver `P>R>D`; a stall in the middle shows up as a branch such as `A>B`.
 
-Delivery itself carries three lines of index, and the body stays in the envelope file. Only after the other side reads it and sends a receipt does the index move from received to in progress. Past `ackTimeoutMs` without a receipt, both sides get a to-do notice.
+Delivery itself carries three lines of index, and the body stays in the envelope file. Only after the other side reads it and sends a receipt does the index move from received to in progress.
+
+### To-do, courier, and backpressure
+
+Past `ackTimeoutMs` without a receipt a letter turns `B` (to-do). Instead of firing a card at both sides, it is handed to the courier channel.
+
+The channel is `<workspace>/.dsh-mail/_courier.json`, one per workspace, strictly serial: one notice at a time, then a `courierIntervalMs` pause (5 seconds by default) before the next. It resumes from the file after a restart.
+
+Three rules.
+
+| Rule | Value | Why |
+|---|---|---|
+| In flight per session | at most 1 unconsumed card | the target runs one turn at a time; extra cards only take up queue space |
+| Open letters per pair | at most 1 | no receipt, no new letter; `S-ACK` and `S-TODO-NOTICE` are exempt |
+| Nudges per letter | at most 2 | one initial, one from the stale watchdog |
+
+Reminders come in two forms, and the two sides see different cards.
+
+```
+(receiver) 〔信箱·待收〕M-20261117-0031
+(sender)   〔信使〕你名下现在 5 封待办：lead 3 封、peer 2 封，最早 41 分钟前。
+           不是对方不理你，是信没被消费或没拿到回执，别等。
+```
+
+If the target stays busy, the letter waits in the held queue (`held`) and the envelope header records `paused: true`. When the target goes idle, the channel first reports the count ("you have N unprocessed"), then delivers one at a time, gated by the previous card being consumed. Only when an envelope sits past `staleAfterMs` (30 minutes by default) may one extra nudge go out.
+
+To stop everything, use `mail_pause` (`do: pause | resume | status`). The flag is on disk and survives restarts.
 
 More than the threshold of round trips between the same pair (three by default) forms a group automatically, and two groups that share a member merge into one. The dedicated channel opened when a session is created is a different thing: it carries `scope=task`, never joins a merge, and retires when a member is archived, when its TTL expires, or when every letter in it settled and stayed idle for ten minutes. Retirement removes the group record and leaves one trail entry.
 
@@ -189,7 +221,7 @@ More than the threshold of round trips between the same pair (three by default) 
 Run these from the repository root. They need Node and nothing else, no dependency install.
 
 ```
-node tools/mail-push-test.mjs            # push, sentinel, groups, workspace mailbox, 34 checks
+node tools/mail-push-test.mjs            # push, channel, backpressure, groups, workspace mailbox, 48 checks
 node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json from _ledger.json, run with --dry-run first
 ```
 
@@ -205,6 +237,8 @@ Find the line that matches what you see and do what it says.
 
 **The receipt says `UNRESOLVED`.** The name you gave is neither a registered name nor a workspace session title. The response carries a candidate list for this workspace; pick one and send again.
 
+**The receipt says `PAIR_OUTSTANDING`.** The previous letter between the same pair is still open; the receipt carries its id and status. Wait for its receipt, or check the backlog with `mail_pause`. `S-ACK` and `S-TODO-NOTICE` are exempt.
+
 **The receipt says `SENDER_NOT_REGISTERED`.** You passed `senderSessionId` but that identity was never registered. Register first, or drop the field. This restriction is deliberate.
 
 **The receipt says `owned by subagent routing`.** The target is a sub-agent session, and the Host refuses pushes to it. Use its parent session, or ask the parent to forward.
@@ -217,7 +251,11 @@ Find the line that matches what you see and do what it says.
 
 **No card appears in the other session.** Check `toPath` in `mail_status` first. If it contains `P`, the letter is on disk but never reached the other context. Then check `push.via` in the sending receipt: `prompt` means the `schedule` service was unavailable and delivery fell back.
 
-**It stays at `P` forever.** That is expected until the other side reads it. Past `ackTimeoutMs` without a receipt it becomes `B`, and both sides get a to-do notice.
+**It stays at `P` forever.** That is expected until the other side reads it. Past `ackTimeoutMs` without a receipt it becomes `B` and the letter moves to the courier channel.
+
+**It turned `B` and the other side still says nothing.** Check `queue` in the `mail_status` reply: `held` means the target stayed busy so nothing was delivered; `paused` means somebody paused the channel. `mail_pause` with `do: status` reports the backlog and how old its oldest item is.
+
+**The sender never got a receipt and assumes the peer is ignoring it.** Look for the `〔信使〕` digest card: it aggregates per sender and is not resent while the numbers stay the same.
 
 **The other side says it received nothing.** Have it look in its own letter body directory (`.dsh-mail/envelope/`). If the file is there, the letter landed and simply never entered its context.
 
