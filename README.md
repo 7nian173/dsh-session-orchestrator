@@ -44,7 +44,7 @@ mail_status  mailId=M-20261017-0001
 | 依赖 | 运行时 | 安装时 | 说明 |
 |---|---|---|---|
 | DeepSeek Harness **0.2.2-rc.3** | 必须 | 必须 | 宿主。版本号取自本机正在运行的官方实例，是当前的适配基线 |
-| 宿主服务 `sessionController`、`sessionPersistence`、`schedule`、`webServer` | 必须 | 不适用 | 由宿主提供，插件只做可选依赖，缺了对应功能降级 |
+| 宿主服务 `sessionController`、`sessionPersistence`、`webServer` | 必须 | 不适用 | 由宿主提供，插件只做可选依赖，缺了对应功能降级 |
 | 宿主事件 `agent/pre-step`、`agent/status` | 必须 | 不适用 | 缺一个，回执与哨兵就不工作 |
 | `@deepseek-ai/schemastery` `~3.19.0` | 必须 | 必须 | 唯一的运行时依赖，装的时候从 npm 下载 |
 | 可访问的 npm registry | 否 | 必须 | 下载上面那个依赖用；离线环境要先把它备好 |
@@ -95,7 +95,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 2. 在 DSH 的插件面板里装这个目录，或者让助手跑上面那两条命令。装完会看到一行 `session-bridge`，版本 `0.1.0`。
 3. 改动代码之后不要只切开关。`set_bundle enabled=false → true` 不会重新加载模块，界面上看起来没变化，实际还是旧的那份。必须走卸载加重装。
 4. 浏览器半身改了之后要整页刷新。刷新一次即可，不用重启应用。
-5. 想确认装好了，随便发一封信，看回执里 `push.via` 是不是 `schedule`，`mailBox` 是不是真实的工作区路径。
+5. 想确认装好了，随便发一封信，看回执里 `push.via` 是不是 `prompt`，`mailBox` 是不是真实的工作区路径。
 
 ## 配置
 
@@ -249,7 +249,7 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 ### 信出去了但对方没反应
 
-**对方上下文里没出现卡片**。先看 `mail_status` 里的 `toPath`。如果有 `P`，说明信落在文件里了，只是没推到对方上下文。再看发信回执里的 `push.via`，是 `prompt` 就说明 `schedule` 服务不可用，退化成了普通投递。
+**对方上下文里没出现卡片**。先看 `mail_status` 里的 `toPath`。如果有 `P`，说明信落在文件里了，只是没推到对方上下文。再看发信回执里的 `push.via`：正常是 `prompt`；`queued` 为 false 时会带 `reason`，常见的是 `target-busy`（已排进通道）或 `target-archived`。
 
 **一直停在 `P`**。对方读过之前会一直是这样。超过 `ackTimeoutMs` 没有回执就转成 `B`，信交给信使通道。
 
@@ -283,9 +283,11 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 **队列投了没反应**。看 `<root>/heartbeat.json` 的 `time` 还在不在更新。不更新说明插件没跑起来，去插件列表确认那一行是启用的。
 
-### 每次都多出一条注入
+### 通知长什么样
 
-**上下文里出现 `[SCHEDULE CHANGE]`**。这是宿主在每次投递时自己加的，实测约 97 tokens。插件侧消不掉，属于用 `schedule` 通道的固定开销。
+**通知以一条用户消息的形式进入目标会话**，正文带 `〔信箱·…〕` / `〔信使〕` 前缀，用来和真人说的话区分。插件不创建宿主「自动化任务」，所以不会在上下文里留 `[SCHEDULE CHANGE]`，也不会往自动化任务列表里堆卡片。
+
+**以前遗留的任务卡**。旧版本用自动化任务投递过通知，插件启动时会把这些 `信箱*` 的已结束任务删掉；还在倒计时的让它自己到期，不再新增。
 
 ## 项目结构
 
@@ -310,7 +312,7 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 建会话走 `sessionController.create`，成功后写一条跳转登记，浏览器半身轮询到记录就切页，同时把「返回创建者」的凭据记下来。
 
-写信走信箱引擎。引擎先把两侧的信封落到各自工作区，再更新状态索引和留痕，然后把一条三行的索引交给 `schedule` 服务，由它投递到目标会话。目标会话读过之后回执，索引里的路径从已接收变处理中，关闭之后变已解决。
+写信走信箱引擎。引擎先把两侧的信封落到各自工作区，再更新状态索引和留痕，然后把一条三行的索引交给 `sessionController.prompt`，由它投递到目标会话的收件箱。目标会话读过之后回执，索引里的路径从已接收变处理中，关闭之后变已解决。
 
 ## 使用它要付的代价
 
@@ -323,7 +325,7 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 ### 2 跨会话采用信箱机制
 
-- 一次通话会造成一份通知噪音，这是宿主（DSH）的固定行为，约 96 tokens。具体通话内容会附录在信件中，信件的每次状态变化都由插件重写。
+- 每次通知都会变成目标会话里的一条用户消息，唤醒对方并占一轮对话；卡片正文只有索引，不带信件全文。插件不再创建宿主自动化任务，因此没有 `[SCHEDULE CHANGE]` 那种注入开销。
 - 你可以改正文，但请不要改头部。
 
 一封真实的信封长这样。

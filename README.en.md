@@ -44,7 +44,7 @@ The plugin has no process of its own. It runs inside the Host process, so at run
 | Dependency | Runtime | Install time | Notes |
 |---|---|---|---|
 | DeepSeek Harness **0.2.2-rc.3** | required | required | The Host. The version was read from the official instance running on this machine and forms the compatibility baseline |
-| Host services `sessionController`, `sessionPersistence`, `schedule`, `webServer` | required | n/a | Provided by the Host; the plugin treats them as optional and degrades per feature |
+| Host services `sessionController`, `sessionPersistence`, `webServer` | required | n/a | Provided by the Host; the plugin treats them as optional and degrades per feature |
 | Host events `agent/pre-step`, `agent/status` | required | n/a | Missing either one breaks receipts and the sentinel |
 | `@deepseek-ai/schemastery` `~3.19.0` | required | required | The only runtime dependency, downloaded from npm at install time |
 | A reachable npm registry | no | required | Needed to fetch that dependency; prepare it first in an offline environment |
@@ -95,7 +95,7 @@ It does not work for the desktop profile, which Electron manages exclusively and
 2. Install that directory from the DSH plugin panel, or let the assistant run the two commands above. You should see a row named `session-bridge` at version `0.1.0`.
 3. Do not just flip the switch after changing code. `set_bundle enabled=false → true` does not reload modules. The interface looks unchanged while the old copy keeps running. Always uninstall and reinstall.
 4. A client-side change needs one full page refresh. One refresh is enough; no application restart.
-5. To confirm the install, send a letter and check that `push.via` in the receipt is `schedule` and that `mailBox` points at a real workspace path.
+5. To confirm the install, send a letter and check that `push.via` in the receipt is `prompt` and that `mailBox` points at a real workspace path.
 
 ## Configuration
 
@@ -249,7 +249,7 @@ Find the line that matches what you see and do what it says.
 
 ### The letter left but nothing happened
 
-**No card appears in the other session.** Check `toPath` in `mail_status` first. If it contains `P`, the letter is on disk but never reached the other context. Then check `push.via` in the sending receipt: `prompt` means the `schedule` service was unavailable and delivery fell back.
+**No card appears in the other session.** Check `toPath` in `mail_status` first. If it contains `P`, the letter is on disk but never reached the other context. Then check `push.via` in the sending receipt: it is normally `prompt`; when `queued` is false the receipt carries a `reason`, usually `target-busy` (queued in the channel) or `target-archived`.
 
 **It stays at `P` forever.** That is expected until the other side reads it. Past `ackTimeoutMs` without a receipt it becomes `B` and the letter moves to the courier channel.
 
@@ -283,9 +283,11 @@ Find the line that matches what you see and do what it says.
 
 **Requests dropped into the queue do nothing.** Check whether `time` in `<root>/heartbeat.json` is still advancing. If it is not, the plugin is not running; confirm its row in the plugin list is enabled.
 
-### One extra injection every time
+### What a notice looks like
 
-**`[SCHEDULE CHANGE]` shows up in the context.** The Host adds it on every delivery, about 97 tokens measured. The plugin cannot suppress it; it is a fixed cost of using the `schedule` channel.
+**A notice arrives as a user message** in the target session, prefixed with `〔信箱·…〕` or `〔信使〕` so it can be told apart from the human. The plugin creates no Host scheduled tasks, so no `[SCHEDULE CHANGE]` injection lands in the context and no cards pile up in the automation list.
+
+**Legacy task cards.** Older versions delivered notices through scheduled tasks; on startup the plugin deletes those ended `信箱*` tasks. Ones still counting down are left to expire on their own, and none are created any more.
 
 ## Project layout
 
@@ -310,7 +312,7 @@ External programs write requests into the queue receive directory (`inbox/`), an
 
 Creating a session goes through `sessionController.create`. On success the plugin writes a jump record, the browser half polls it and switches the page, and the credential for "Back to creator" is stored at the same time.
 
-Writing a letter goes through the mailbox engine. The engine lands both envelopes in their own workspaces, updates the path index and the trail, then hands a three-line index to the `schedule` service for delivery. Once the target reads it and acknowledges, the index moves from received to in progress, and to done on close.
+Writing a letter goes through the mailbox engine. The engine lands both envelopes in their own workspaces, updates the path index and the trail, then hands a three-line index to `sessionController.prompt` for delivery into the target inbox. Once the target reads it and acknowledges, the index moves from received to in progress, and to done on close.
 
 ## What it costs you
 
@@ -323,7 +325,7 @@ To deliver some of its features, the plugin performs the following cross-workspa
 
 ### 2 Cross-session traffic goes through the mailbox
 
-- One delivery produces one notice worth of noise. That is a fixed behaviour of the Host (DSH), about 96 tokens. The actual conversation content is attached inside the letter, and every state change of a letter is rewritten by the plugin.
+- Every notice becomes one user message in the target session: it wakes the session and costs one turn, while the card body carries only the index, never the letter text. The plugin creates no Host scheduled tasks, so the `[SCHEDULE CHANGE]` injection is gone.
 - You may edit the body, but please leave the header alone.
 
 A real envelope looks like this.
