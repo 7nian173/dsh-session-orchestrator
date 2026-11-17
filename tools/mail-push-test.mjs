@@ -83,7 +83,11 @@ const chController = {
     chCalls.push({ id: String(req.requestId), sessionId: req.sessionId, text: (req.content && req.content[0] && req.content[0].text) || '' })
     return { ok: true }
   },
-  async state() { return { running: busy2, active: busy2 } },
+  async state(request) {
+    const id = request && request.sessionId
+    const busy = busy2 && id === 'S4'
+    return { running: busy, active: busy }
+  },
 }
 const chBox = createMailbox({
   ackTimeoutMs: 600000,
