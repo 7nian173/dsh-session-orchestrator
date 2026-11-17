@@ -40,7 +40,7 @@ mail_status  mailId=M-20261017-0001
 - 一个跑起来的 DSH Desktop。插件用到的宿主服务是 `sessionController`、`sessionPersistence`、`schedule`、`webServer`。
 - 插件目录的绝对路径，路径里可以有中文。
 - 没有第三方运行时依赖，只用系统自带的 Node。
-- 队列目录（默认 `$DSH_HOME/session-bridge`）和工作区目录都要能写。
+- 队列目录（默认 `$DSH_HOME/session-bridge`）和工作区目录都要能写。队列负责跨会话投递（`session-bridge/`），工作区负责存信（`.dsh-mail/`）。
 - 宿主事件要对得上：`agent/pre-step`、`agent/status` 两个钩子缺一个，回执与哨兵就不工作。
 
 ## 安装
@@ -84,7 +84,7 @@ dsh plugin --profile <环境名> add <包名或仓库地址>
 
 | 字段 | 默认值 | 作用 |
 |---|---|---|
-| `dir` | `''`（即 `$DSH_HOME/session-bridge`） | 队列根目录 |
+| `dir` | `''`（即 `$DSH_HOME/session-bridge`） | 队列根目录，六个子目录都在它下面 |
 | `pollMs` | `1000` | 队列扫描间隔 |
 | `replyTimeoutMs` | `180000` | 等一轮回复的默认时长 |
 | `maxReplyChars` | `8000` | 回复截断长度 |
@@ -110,12 +110,12 @@ dsh plugin --profile <环境名> add <包名或仓库地址>
 不需要登录态，也不需要端口。往一个目录里投 JSON，读另一个目录拿结果。
 
 ```
-<root>/inbox/<id>.json        请求（先写 .tmp 再 rename）
-<root>/working/<id>.<x>.json  已认领，处理中
-<root>/outbox/<id>.json       结果（一定写，原子写）
-<root>/done/<id>.json         已完成，同时是幂等账本
-<root>/failed/<id>.json       失败副本
-<root>/heartbeat.json         存活心跳
+<root>/inbox/<id>.json        收件（inbox）          请求，先写 .tmp 再 rename
+<root>/working/<id>.<x>.json  处理中（working）      已认领，正在跑
+<root>/outbox/<id>.json       取件（outbox）         结果，一定写，原子写
+<root>/done/<id>.json         已完成（done）         同时是幂等账本
+<root>/failed/<id>.json       失败（failed）         失败副本
+<root>/heartbeat.json         心跳（heartbeat）      存活时间戳
 ```
 
 可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_group`。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
@@ -143,12 +143,12 @@ dsh plugin --profile <环境名> add <包名或仓库地址>
 信箱落在工作区里，一个工作区一套。
 
 ```
-<工作区>/.dsh-mail/
-    _letters.json                这个工作区的信件状态
-    envelope/<mail_id>.<side>.md 两侧各一份信封，side 是 from 或 to
-    _index.json                  每封信每一侧的路径索引
-    _ledger.json                 只追加的留痕
-    group.json                   群与会话路由
+<工作区>/.dsh-mail/              信箱目录（.dsh-mail/）
+    _letters.json                信件状态：这个工作区的全部信件
+    envelope/<mail_id>.<side>.md 信件本体：两侧各一份，side 是 from 或 to
+    _index.json                  路径索引：每封信每一侧的字母序列
+    _ledger.json                 事件留痕：只追加，不修改
+    group.json                   群路由表：群成员与专用通道
 ```
 
 状态、目录、字母三者对应关系固定：
@@ -199,7 +199,7 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 **一直停在 `P`**。对方读过之前会一直是这样。超过 `ackTimeoutMs` 没有回执就转成 `B`，那时候两侧都会收到待办通知。
 
-**对方说没收到**。让对方看自己工作区下的 `.dsh-mail/envelope/`，文件在就说明信到了，只是没进他的上下文。
+**对方说没收到**。让对方去看自己工作区的信件本体目录（`.dsh-mail/envelope/`）。文件在就说明信已经落地，只是没进他的上下文。
 
 ### 按钮不出现，或者一直挂着
 
@@ -232,12 +232,12 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 ## 项目结构
 
 ```
-lib/index.js     宿主半身。队列、工具注册、同源路由、好友表、会话编排
-lib/mail.js      信箱引擎。状态机、信封落盘、索引、留痕、群与专用通道
-lib/client.js    浏览器半身。跳转按钮与返回按钮
-cordis.patch.yml 挂载入口，行 id 是 session-bridge
-docs/            架构图与生成回执
-tools/           自检脚本（在上一级目录）
+宿主半身（lib/index.js）      队列、工具注册、同源路由、好友表、会话编排
+信箱引擎（lib/mail.js）       状态机、信件落盘、索引、留痕、群与专用通道
+浏览器半身（lib/client.js）   跳转按钮与返回按钮
+挂载入口（cordis.patch.yml）  行 id 是 session-bridge
+架构图（docs/）               架构图与生成回执
+自检脚本（tools/）            在上一级目录，三个 node 脚本
 ```
 
 ## 架构与工作流
@@ -248,7 +248,7 @@ tools/           自检脚本（在上一级目录）
 
 图支持深浅色和缩放，也可以直接全屏。下面按走线讲一遍。
 
-外部程序把请求写进 `inbox/`，分发器认领之后按 action 分派。Agent 走工具调用，落在同一个分发器上，只是不用经过文件。
+外部程序把请求写进队列收件目录（`inbox/`），分发器认领之后按 action 分派。Agent 走工具调用，落在同一个分发器上，只是不用经过文件。
 
 建会话走 `sessionController.create`，成功后写一条跳转登记，浏览器半身轮询到记录就切页，同时把「返回创建者」的凭据记下来。
 
@@ -258,7 +258,7 @@ tools/           自检脚本（在上一级目录）
 
 这个插件在别人的工作区里做事，有几件事你得先知道。
 
-**会在目标工作区里建目录和文件。** 对方只是收到一封信，本地就多出一个 `.dsh-mail/` 目录，里面有状态文件、索引、留痕和两侧的信封。没有注册过的会话不受影响，一旦注册就会建。
+**会在目标工作区里建目录和文件。** 对方只是收到一封信，本地就多出一个信箱目录（`.dsh-mail/`），里面装着状态、索引、留痕和两侧的信件本体。没有注册过的会话不受影响，一旦注册就会建。
 
 **信封格式是插件写的，手改会被覆盖。** 头部的 `mail_id`、`side`、`status`、`path`、`dir_owner` 由插件维护，`status` 和 `path` 每次状态变化都会重写。你可以改正文，不要改头部。
 
@@ -285,7 +285,7 @@ v0.1.0 实测：正文只留在信封文件里，MARKER-OCTRL-001。
 
 **会在宿主的自动化任务里建临时任务。** 每个通知建一条 `after` 任务，投完就不再引用，由插件定期批量清理已结束的任务。
 
-**会写跳转登记。** 每次跳转在 `session-bridge/jumps/` 下留一条链接记录和一个已用标记，用来决定按钮出不出现。
+**会写跳转登记。** 每次跳转都在跳转登记目录（`session-bridge/jumps/`）下留一条链接记录和一个已用标记，用来决定按钮出不出现。
 
 ## 版本
 
