@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: syntax
+        run: |
+          for f in lib/index.js lib/mail.js lib/client.js; do
+            node --check "$f"
+            echo "ok $f"
+          done
+
+      - name: self-check suite
+        run: node tools/mail-push-test.mjs
+
+      - name: manifest
+        run: |
+          node -e "
+          const fs = require('fs');
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const missing = (p.files || []).filter((f) => !fs.existsSync(f));
+          if (missing.length) { console.error('missing files:', missing); process.exit(1); }
+          if (!fs.existsSync(p.dsh.bundle.patch)) { console.error('bundle patch missing'); process.exit(1); }
+          console.log('files:', p.files.length, '| version:', p.version, '| license:', p.license);
+          "
+
+      - name: docs
+        run: |
+          python3 tools/check-docs.py README.md
+          python3 tools/check-docs.py README.en.md
