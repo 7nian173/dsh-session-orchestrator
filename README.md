@@ -41,13 +41,13 @@ mail_status  mailId=M-20261017-0001
 
 | 依赖 | 运行时 | 安装时 | 说明 |
 |---|---|---|---|
-| DeepSeek Harness **0.2.2-rc.1**（社区版） | 必须 | 必须 | 宿主。版本号取自本机正在运行的实例，是当前的适配基线 |
+| DeepSeek Harness **0.2.2-rc.3** | 必须 | 必须 | 宿主。版本号取自本机正在运行的官方实例，是当前的适配基线 |
 | 宿主服务 `sessionController`、`sessionPersistence`、`schedule`、`webServer` | 必须 | 不适用 | 由宿主提供，插件只做可选依赖，缺了对应功能降级 |
 | 宿主事件 `agent/pre-step`、`agent/status` | 必须 | 不适用 | 缺一个，回执与哨兵就不工作 |
 | `@deepseek-ai/schemastery` `~3.19.0` | 必须 | 必须 | 唯一的运行时依赖，装的时候从 npm 下载 |
 | 可访问的 npm registry | 否 | 必须 | 下载上面那个依赖用；离线环境要先把它备好 |
 | pnpm 11 | 否 | 必须 | DSH 自带一份，`plugin_manager` 和 `dsh plugin` 都调它，通常不用单独装 |
-| Node ≥ 18 | 否 | 跑自检脚本时 | 插件本身用宿主内置的 Node；`tools/` 下的脚本和 CLI 需要自己有一个 |
+| Node ≥ 18 | 否 | 跑自检脚本时 | 插件用宿主内置的 Node（官方桌面端自带 24.21.0）；`tools/` 下的脚本和 CLI 需要自己有一个 |
 | Git | 否 | 从仓库地址安装时 | 用本地目录安装不需要 |
 
 另外三条硬要求。
@@ -208,6 +208,8 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 **回执里写着 `owned by subagent routing`**。你选的目标是个子 agent 会话，宿主不接受对它的推送。换成它的父会话，或者让父会话帮忙转一下。
 
 **回执里 `queued` 是 false，原因是 `no-controller`**。宿主服务还没就绪。等插件重新挂载完再试，不要连续重试。
+
+**回执里写着 `TARGET_ARCHIVED`**。你要发的那一方已经被归档了，宿主不会再往那里投递。换一个活动会话，或者先在界面上取消归档。
 
 ### 信出去了但对方没反应
 

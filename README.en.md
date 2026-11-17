@@ -41,13 +41,13 @@ The plugin has no process of its own. It runs inside the Host process, so at run
 
 | Dependency | Runtime | Install time | Notes |
 |---|---|---|---|
-| DeepSeek Harness **0.2.2-rc.1** (community build) | required | required | The Host. The version was read from the instance running on this machine and forms the compatibility baseline |
+| DeepSeek Harness **0.2.2-rc.3** | required | required | The Host. The version was read from the official instance running on this machine and forms the compatibility baseline |
 | Host services `sessionController`, `sessionPersistence`, `schedule`, `webServer` | required | n/a | Provided by the Host; the plugin treats them as optional and degrades per feature |
 | Host events `agent/pre-step`, `agent/status` | required | n/a | Missing either one breaks receipts and the sentinel |
 | `@deepseek-ai/schemastery` `~3.19.0` | required | required | The only runtime dependency, downloaded from npm at install time |
 | A reachable npm registry | no | required | Needed to fetch that dependency; prepare it first in an offline environment |
 | pnpm 11 | no | required | DSH ships one, used by both `plugin_manager` and `dsh plugin`, so usually nothing to install |
-| Node >= 18 | no | for the self-check scripts | The plugin uses the Host's built-in Node; the scripts under `tools/` and the CLI need one of your own |
+| Node >= 18 | no | for the self-check scripts | The plugin uses the Host's built-in Node (the official desktop app bundles 24.21.0); the scripts under `tools/` and the CLI need one of your own |
 | Git | no | when installing from a repository URL | Not needed for a local directory install |
 
 Three hard requirements besides the table.
@@ -208,6 +208,8 @@ Find the line that matches what you see and do what it says.
 **The receipt says `owned by subagent routing`.** The target is a sub-agent session, and the Host refuses pushes to it. Use its parent session, or ask the parent to forward.
 
 **The receipt has `queued` false with reason `no-controller`.** The Host service is not ready yet. Wait for the plugin to finish remounting and try once more rather than retrying in a loop.
+
+**The receipt says `TARGET_ARCHIVED`.** The other side has been archived and the Host will not deliver there any more. Pick a live session, or unarchive it in the interface first.
 
 ### The letter left but nothing happened
 
