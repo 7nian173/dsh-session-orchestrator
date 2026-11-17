@@ -214,7 +214,7 @@ If the target stays busy, the letter waits in the held queue (`held`) and the en
 
 To stop everything, use `mail_pause` (`do: pause | resume | status`). The flag is on disk and survives restarts.
 
-More than the threshold of round trips between the same pair (three by default) forms a group automatically, and two groups that share a member merge into one. The dedicated channel opened when a session is created is a different thing: it carries `scope=task`, never joins a merge, and retires when a member is archived, when its TTL expires, or when every letter in it settled and stayed idle for ten minutes. Retirement removes the group record and leaves one trail entry.
+More than the threshold of round trips between the same pair (three by default) forms a group automatically, and two groups that share a member merge into one. Forming a group only writes `group.json` and a trail entry: no message is pushed to either side, because a routing change needs no answer. Check the `group` field in `mail_status` when you need to confirm the relationship. The dedicated channel opened when a session is created is a different thing: it carries `scope=task`, never joins a merge, and retires when a member is archived, when its TTL expires, or when every letter in it settled and stayed idle for ten minutes. Retirement removes the group record and leaves one trail entry.
 
 ## Maintenance and self-checks
 
