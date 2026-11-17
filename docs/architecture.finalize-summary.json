@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "D:\\dshdata\\本地\\.archify\\architecture-session-mailbox-20261117-1455\\candidate.json",
+    "sha256": "99c133587941b182e8b7a340dc29718be0e6aa17131a066ea46344c1e95200fa",
+    "bytes": 7550
+  },
+  "artifact": {
+    "path": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.html",
+    "sha256": "3f968d4c7daa2b64b1638464162795a23fc7b58c15bcd771301b382e0e86f7b0",
+    "bytes": 769201
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.finalize.json",
+    "summaryReceipt": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.finalize-summary.json",
+    "browserCheckReceipt": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.browser-check.json"
+  },
+  "update": {
+    "status": "update_available",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.2.0",
+    "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
+    "severity": "normal",
+    "checkedAt": "2026-11-17T06:57:47.760Z",
+    "source": "cache",
+    "noticeRequired": true,
+    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-17T06:57:47.760Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
+    "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
+  },
+  "visualReview": "not-requested",
+  "durationMs": 6667
+}

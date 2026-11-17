@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "2634abcd-b4f0-45d1-a4a0-dc45cff78312",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "D:\\dshdata\\本地\\.archify\\architecture-session-mailbox-20261117-1455\\candidate.json",
+  "output": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.html",
+  "specification": {
+    "sha256": "99c133587941b182e8b7a340dc29718be0e6aa17131a066ea46344c1e95200fa",
+    "bytes": 7550
+  },
+  "artifact": {
+    "sha256": "3f968d4c7daa2b64b1638464162795a23fc7b58c15bcd771301b382e0e86f7b0",
+    "bytes": 769201
+  }
+}
