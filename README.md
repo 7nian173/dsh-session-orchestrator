@@ -37,7 +37,7 @@ mail_status  mailId=M-20261017-0001
 
 ## 装它需要什么
 
-- 一个跑起来的 DSH Desktop。插件用到的宿主服务是 `sessionController`、`sessionPersistence`、`schedule`、`webServer`。
+- DeepSeek Harness **0.2.2-rc.1**，桌面壳是 `dsh-desktop-next 2.0.22-next`。这两个号都是从本机正在运行的实例里读出来的，也是当前的适配基线。插件用到的宿主服务是 `sessionController`、`sessionPersistence`、`schedule`、`webServer`。
 - 插件目录的绝对路径，路径里可以有中文。
 - 没有第三方运行时依赖，只用系统自带的 Node。
 - 队列目录（默认 `$DSH_HOME/session-bridge`）和工作区目录都要能写。队列负责跨会话投递（`session-bridge/`），工作区负责存信（`.dsh-mail/`）。
@@ -64,13 +64,15 @@ plugin_manager action=install_bundle target=<插件目录绝对路径>
 
 ### 命令行安装（非桌面环境）
 
-DSH 支持在 profile 里直接加包，参数会转发给 pnpm：
+DSH 自带一条命令，参数转发给 pnpm，包和它的依赖一起装上：
 
 ```
-dsh plugin --profile <环境名> add <包名或仓库地址>
+dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 ```
 
-这条命令不需要另做包装，但要求包能从 npm 或可访问的仓库解析到。桌面版走不了这条，profile `desktop` 由 Electron 独占管理，`dsh plugin` 会直接报错，桌面版只能用上面的 `plugin_manager`。仓库现在已经公开。这个包还没有发布到 npm，从仓库地址安装这条路我没有在非桌面 profile 上端到端验证过；桌面版仍然只能用 `plugin_manager`。
+不需要另做包装。实测在 `headless` profile 上跑通：装完 `package.json` 的 `dependencies` 和 `dsh.profile.bundles` 会自动各加一条，`lib/` 三个文件到位，`@deepseek-ai/schemastery` 从 npm 正常解析。
+
+桌面版走不了这条。profile `desktop` 由 Electron 独占管理，`dsh plugin` 会直接报错，桌面版只能用上面的 `plugin_manager`。
 
 ### 给人操作
 
@@ -256,11 +258,17 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 ## 使用它要付的代价
 
-这个插件在别人的工作区里做事，有几件事你得先知道。
+为了实现部分功能，本插件会进行以下跨工作区行为。
 
-**会在目标工作区里建目录和文件。** 对方只是收到一封信，本地就多出一个信箱目录（`.dsh-mail/`），里面装着状态、索引、留痕和两侧的信件本体。没有注册过的会话不受影响，一旦注册就会建。
+### 1 在目标工作区根目录里创建目录和文件
 
-**信封格式是插件写的，手改会被覆盖。** 头部的 `mail_id`、`side`、`status`、`path`、`dir_owner` 由插件维护，`status` 和 `path` 每次状态变化都会重写。你可以改正文，不要改头部。
+- 会建立一个信箱目录（`.dsh-mail/`），里面装着状态、索引、留痕和两侧的信件本体。
+- 被插件创建的工作区必定注册信箱目录；手动设置的工作区与旧工作区不受影响，只有动用插件实现跨会话协议时才创建。
+
+### 2 跨会话采用信箱机制
+
+- 一次通话会造成一份通知噪音，这是宿主（DSH）的固定行为，约 96 tokens。具体通话内容会附录在信件中，信件的每次状态变化都由插件重写。
+- 你可以改正文，但请不要改头部。
 
 一封真实的信封长这样。
 
@@ -279,13 +287,6 @@ path: P>R
 v0.1.0 实测：正文只留在信封文件里，MARKER-OCTRL-001。
 ```
 
-**会改全工作区共用的好友表。** 建会话时自动往 `friends.json` 里写名字，会话归档后又自动删。这张表不是某个会话私有的。
-
-**会往目标会话里投消息。** 每封信至少一次，投进对方上下文是一张自动化任务卡片。宿主在卡片之外还会额外注入一条 `[SCHEDULE CHANGE]`，实测约 97 tokens。哨兵重推会再来一轮。信多的时候这笔开销要算进去。
-
-**会在宿主的自动化任务里建临时任务。** 每个通知建一条 `after` 任务，投完就不再引用，由插件定期批量清理已结束的任务。
-
-**会写跳转登记。** 每次跳转都在跳转登记目录（`session-bridge/jumps/`）下留一条链接记录和一个已用标记，用来决定按钮出不出现。
 
 ## 版本
 

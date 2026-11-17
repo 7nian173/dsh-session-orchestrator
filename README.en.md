@@ -37,7 +37,7 @@ External programs do not use these tools. They drop files into the queue, as des
 
 ## What it needs
 
-- A running DSH Desktop. The Host services it uses are `sessionController`, `sessionPersistence`, `schedule`, and `webServer`.
+- DeepSeek Harness **0.2.2-rc.1**, with the desktop shell `dsh-desktop-next 2.0.22-next`. Both numbers were read from the instance running on this machine and form the current compatibility baseline. The Host services it uses are `sessionController`, `sessionPersistence`, `schedule`, and `webServer`.
 - An absolute path to the plugin directory. The path may contain non-ASCII characters.
 - No third-party runtime dependencies. Only the Node that ships with the system.
 - Write access to the queue directory (default `$DSH_HOME/session-bridge`) and to the workspace directories. The queue carries cross-session delivery (`session-bridge/`), the workspace stores letters (`.dsh-mail/`).
@@ -64,13 +64,15 @@ The only proof of success is `application` equal to `applied` in the receipt. Lo
 
 ### Command line (non-desktop profiles)
 
-DSH can add a package to a profile directly, forwarding the arguments to pnpm:
+DSH ships one command that forwards its arguments to pnpm, installing the package together with its dependencies:
 
 ```
-dsh plugin --profile <profile> add <package or repository URL>
+dsh plugin --profile <profile> add github:<account>/dsh-session-orchestrator
 ```
 
-This needs no extra packaging, but the package must resolve from npm or a reachable repository. It does not work for the desktop profile, which Electron manages exclusively and where `dsh plugin` fails outright. Desktop users install through `plugin_manager` above. The repository is public now. The package is not published to npm, and I have not verified an end-to-end install from the repository URL on a non-desktop profile; desktop still installs through `plugin_manager`.
+No extra packaging is needed. Verified on the `headless` profile: when it finishes, `dependencies` and `dsh.profile.bundles` in that profile's `package.json` each gain one entry, the three files under `lib/` are in place, and `@deepseek-ai/schemastery` resolves from npm.
+
+It does not work for the desktop profile, which Electron manages exclusively and where `dsh plugin` fails outright. Desktop users install through `plugin_manager` above.
 
 ### For a human
 
@@ -256,11 +258,17 @@ Writing a letter goes through the mailbox engine. The engine lands both envelope
 
 ## What it costs you
 
-This plugin works inside other people's workspaces, so a few things are worth knowing up front.
+To deliver some of its features, the plugin performs the following cross-workspace actions.
 
-**It creates directories and files in the target workspace.** The other side merely receives a letter, yet a mailbox directory (`.dsh-mail/`) appears locally, holding state, index, trail, and both letter bodies. Sessions that never register are untouched; once one registers, the directory is created.
+### 1 It creates directories and files in the target workspace root
 
-**The envelope header belongs to the plugin, and hand edits get overwritten.** The fields `mail_id`, `side`, `status`, `path`, and `dir_owner` are maintained by the plugin, and `status` and `path` are rewritten on every state change. Edit the body if you like, but leave the header alone.
+- A mailbox directory (`.dsh-mail/`) is created, holding state, index, trail, and both letter bodies.
+- Workspaces the plugin creates always register the mailbox directory. Workspaces you set up by hand and older workspaces are untouched; the directory appears only when the cross-session protocol is actually used.
+
+### 2 Cross-session traffic goes through the mailbox
+
+- One delivery produces one notice worth of noise. That is a fixed behaviour of the Host (DSH), about 96 tokens. The actual conversation content is attached inside the letter, and every state change of a letter is rewritten by the plugin.
+- You may edit the body, but please leave the header alone.
 
 A real envelope looks like this.
 
@@ -279,13 +287,6 @@ path: P>R
 v0.1.0 live test: the body lives only in the envelope file, MARKER-OCTRL-001.
 ```
 
-**It rewrites the friends table shared by the whole profile.** Creating a session writes a name into `friends.json`, and archiving a session removes it. That table is not private to any single session.
-
-**It pushes messages into the target session.** At least once per letter, appearing in the other context as an automation task card. Beyond that card the Host injects one `[SCHEDULE CHANGE]`, about 97 tokens measured. A sentinel re-push starts another round. With many letters the cost adds up.
-
-**It creates temporary tasks in the Host automation list.** Each notice creates one `after` task, dropped after delivery, and the plugin periodically deletes ended tasks in batches.
-
-**It writes jump records.** Every jump leaves a link record and a used marker in the jump record directory (`session-bridge/jumps/`), which is what decides whether the button appears.
 
 ## Version
 
