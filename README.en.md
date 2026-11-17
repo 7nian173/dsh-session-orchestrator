@@ -41,8 +41,7 @@ The plugin has no process of its own. It runs inside the Host process, so at run
 
 | Dependency | Runtime | Install time | Notes |
 |---|---|---|---|
-| DeepSeek Harness **0.2.2-rc.1** | required | required | The Host. Both version numbers were read from the instance running on this machine and form the compatibility baseline |
-| Desktop shell `dsh-desktop-next 2.0.22-next` | required on desktop | required on desktop | Not involved for non-desktop profiles |
+| DeepSeek Harness **0.2.2-rc.1** (community build) | required | required | The Host. The version was read from the instance running on this machine and forms the compatibility baseline |
 | Host services `sessionController`, `sessionPersistence`, `schedule`, `webServer` | required | n/a | Provided by the Host; the plugin treats them as optional and degrades per feature |
 | Host events `agent/pre-step`, `agent/status` | required | n/a | Missing either one breaks receipts and the sentinel |
 | `@deepseek-ai/schemastery` `~3.19.0` | required | required | The only runtime dependency, downloaded from npm at install time |

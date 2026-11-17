@@ -41,8 +41,7 @@ mail_status  mailId=M-20261017-0001
 
 | 依赖 | 运行时 | 安装时 | 说明 |
 |---|---|---|---|
-| DeepSeek Harness **0.2.2-rc.1** | 必须 | 必须 | 宿主。两个版本号都是从本机正在运行的实例里读出来的，是当前的适配基线 |
-| 桌面壳 `dsh-desktop-next 2.0.22-next` | 桌面版必须 | 桌面版必须 | 非桌面 profile 不涉及 |
+| DeepSeek Harness **0.2.2-rc.1**（社区版） | 必须 | 必须 | 宿主。版本号取自本机正在运行的实例，是当前的适配基线 |
 | 宿主服务 `sessionController`、`sessionPersistence`、`schedule`、`webServer` | 必须 | 不适用 | 由宿主提供，插件只做可选依赖，缺了对应功能降级 |
 | 宿主事件 `agent/pre-step`、`agent/status` | 必须 | 不适用 | 缺一个，回执与哨兵就不工作 |
 | `@deepseek-ai/schemastery` `~3.19.0` | 必须 | 必须 | 唯一的运行时依赖，装的时候从 npm 下载 |
