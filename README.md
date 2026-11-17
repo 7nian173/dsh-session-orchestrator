@@ -141,7 +141,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 <root>/heartbeat.json         心跳（heartbeat）      存活时间戳
 ```
 
-可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
+可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`；只读探针 `peer_state` 用来问某个会话现在忙不忙。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
 
 ### 模型工具，给 Agent
 
@@ -221,8 +221,8 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 提醒分两个形态，收信方和发信方看到的不是同一张卡。
 
 ```
-（收信方）〔信箱·待收〕M-20261117-0031
-（发信方）〔信使〕你名下现在 5 封待办：lead 3 封、peer 2 封，最早 41 分钟前。
+（形态 A · 收信方）〔信箱·待收〕M-20261117-0031
+（形态 B · 发信方）〔信使〕你名下现在 5 封待办：lead 3 封、peer 2 封，最早 41 分钟前。
          不是对方不理你 —— 是信没被消费或没拿到回执，别等。
 ```
 

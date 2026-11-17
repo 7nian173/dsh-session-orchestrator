@@ -141,7 +141,7 @@ No login state, no listening port. Drop JSON into one directory, read the result
 <root>/heartbeat.json         heartbeat           liveness timestamp
 ```
 
-Available actions are `deliver`, `sessions`, `events`, `init_workspace`, `handoff`, `notify`, `relay`, `list_children`, `jump`, `delete_workspace`, and `probe_workspace_stream`; mailbox actions are `mail_send`, `mail_ack`, `mail_list`, `mail_status`, `mail_pause`, and `mail_group`. One id is never processed twice, so retrying with the same id returns the first result.
+Available actions are `deliver`, `sessions`, `events`, `init_workspace`, `handoff`, `notify`, `relay`, `list_children`, `jump`, `delete_workspace`, and `probe_workspace_stream`; mailbox actions are `mail_send`, `mail_ack`, `mail_list`, `mail_status`, `mail_pause`, and `mail_group`; the read-only `peer_state` probe reports whether a session is busy. One id is never processed twice, so retrying with the same id returns the first result.
 
 ### Model tools, for agents
 
@@ -218,11 +218,11 @@ Three rules.
 | Soft release | 10 minutes | a safety net for the pathological case where a letter sits at `delivered` and never turns to-do (lost timer); the normal path turns it to-do at 5 minutes and releases the pair anyway. Trailed as `backpressure:soft-release`; `0` disables it |
 | Nudges per letter | at most 2 | one initial, one from the stale watchdog |
 
-Reminders come in two forms, and the two sides see different cards.
+Reminders come in two forms, and the two sides see different cards. The envelope header counts them separately: `notice_a` for form A, `notice_b` for form B; they belong to different sides, so do not read them as one number.
 
 ```
-(receiver) 〔信箱·待收〕M-20261117-0031
-(sender)   〔信使〕你名下现在 5 封待办：lead 3 封、peer 2 封，最早 41 分钟前。
+(form A · receiver) 〔信箱·待收〕M-20261117-0031
+(form B · sender) 〔信使〕你名下现在 5 封待办：lead 3 封、peer 2 封，最早 41 分钟前。
            不是对方不理你 —— 是信没被消费或没拿到回执，别等。
 ```
 
