@@ -117,6 +117,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `childNamePrefix` | `agent-` | 建会话自动注册时的名字前缀 |
 | `taskChannelTtlMs` | `86400000` | 创建者与新会话之间专用通道的存活时长 |
 | `taskChannelIdleMs` | `600000` | 群内信件全部落定后静默多久回收该通道 |
+| `dispatcher` | `true` | 是否跑队列轮询与同源路由。预设里挂的工具实例要设 `false`，工具调用走文件队列交给正在跑的那个实例 |
 | `courierIntervalMs` | `5000` | 信使通道两条提醒之间的间隔 |
 | `busyHoldMs` | `180000` | 目标一直在任务中超过这么久，信转待办 |
 | `staleAfterMs` | `1800000` | 信封静置超过这么久，允许补一次催收 |
@@ -159,6 +160,17 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `mail_status` | 看某一封走过的路径、所属群、是否逾期、通道积压 |
 | `mail_pause` | 暂停或恢复信使通道，查通道积压 |
 | `mail_group` | 建群、列群，或取本工作区候选会话 |
+
+**Agent 预设里也要挂一份。** 预设的会话只看到预设里声明的插件，根上挂的那一份不会自动进来。在预设的 `plugins` 里加：
+
+```yaml
+- id: session-bridge
+  name: dsh-session-orchestrator
+  config:
+    dispatcher: false   # 工具面只挂一份，队列轮询与 HTTP 路由留给根实例
+```
+
+`dispatcher: false` 的实例只注册工具，不轮询队列、不注册路由；工具调用写成队列请求，由正在跑的那个实例处理，两边共用同一套 `.dsh-mail/`。
 
 ## 信件怎么流转
 

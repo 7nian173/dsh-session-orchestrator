@@ -117,6 +117,7 @@ It does not work for the desktop profile, which Electron manages exclusively and
 | `childNamePrefix` | `agent-` | Name prefix used when a new session registers automatically |
 | `taskChannelTtlMs` | `86400000` | Lifetime of the dedicated channel between creator and child |
 | `taskChannelIdleMs` | `600000` | Idle time before a channel whose letters all settled is retired |
+| `dispatcher` | `true` | Run the queue dispatcher and same-origin routes. A tools-only instance mounted in an agent preset sets `false` and forwards tool calls to the running dispatcher over the file queue |
 | `courierIntervalMs` | `5000` | Gap between two courier notice deliveries |
 | `busyHoldMs` | `180000` | Time a target may stay busy before an undelivered letter is held |
 | `staleAfterMs` | `1800000` | Time an envelope may sit untouched before one extra nudge |
@@ -158,6 +159,17 @@ Eleven in total.
 | `mail_list` | List letters by owner |
 | `mail_status` | Path taken, owning group, overdue flag, channel backlog for one letter |
 | `mail_pause` | Pause or resume the courier channel, or report its backlog |
+
+**An agent preset needs its own row.** A preset session only sees plugins its declaration lists; the root-mounted copy does not flow in. Add to the preset `plugins`:
+
+```yaml
+- id: session-bridge
+  name: dsh-session-orchestrator
+  config:
+    dispatcher: false   # tools only; queue polling and HTTP routes stay on the root instance
+```
+
+An instance with `dispatcher: false` registers tools only. Tool calls become queue requests handled by the running dispatcher, and both instances share the same `.dsh-mail/` files.
 | `mail_group` | Create or list groups, or fetch workspace candidates |
 
 ## How a letter travels
