@@ -48,6 +48,9 @@ The Host half registers as row `session-bridge`. Changing `.js` files needs a re
 | `ackTimeoutMs` | `300000` | letter → 待办 after this long without a receipt |
 | `notifyToken` | `''` | shared token for `POST /session-bridge/notify` (renderer-only route) |
 | `backTtlMs` | `1800000` | how long a recorded jump keeps offering the 返回创建者 button |
+| `childNamePrefix` | `agent-` | prefix for names auto-registered on session creation |
+| `taskChannelTtlMs` | `86400000` | TTL of the dedicated creator↔child channel |
+| `taskChannelIdleMs` | `600000` | retire a channel when every letter settled and stayed idle this long |
 
 ## Queue protocol
 
@@ -103,6 +106,16 @@ and the client calls `/back-consume` the moment it renders, so a refresh never g
   Busy again inside the window → drop it and shrink the cadence `10s → 5s → 3s → 2s` (floor 2 s).
   Every beat is written to `_ledger.json`.
 - **No receipt → 待办.** Both sides get the same three-line notice.
+- **Creating a session wires the pair.** `session_init_workspace` / `session_handoff` register both sides
+  (name = prefix + title, or prefix + session id tail when the title is not there yet), create both mailbox
+  boxes, and open one dedicated `scope:"task"` channel with a 24 h TTL. The result carries a `wire` field.
+  A dedicated channel never joins a merge, and is promoted to an ordinary group the moment a normal group
+  is requested for that pair. It retires on TTL, or once every letter of the pair settled and stayed idle
+  10 minutes; retirement removes only the group record and leaves one `channel:retired` line in `_ledger.json`.
+- **Friend names follow session lifecycle.** A sweep (cold start, then at most every 30 minutes) drops a
+  registered name when its session is in the host archive registry (`storages/workspace.json` →
+  `global.archivedSessionIds`) or vanished from persistence for more than 10 minutes. An empty persistence
+  snapshot never clears the table.
 - **Groups are routing only.** `A↔B` round-trips crossing the threshold (default 3) create a group; groups merge
   on set intersection (`SA ∩ SC ≠ ∅`). Group members route delivery by session id; acknowledgements still travel
   as ordinary letters.

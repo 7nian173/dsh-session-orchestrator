@@ -45,6 +45,9 @@ Host 半身注册为 `session-bridge` 一行。改过 `.js` 之后必须重新�
 | `ackTimeoutMs` | `300000` | 超过这段时间没有回执，信件转待办 |
 | `notifyToken` | `''` | `POST /session-bridge/notify` 的共享令牌（该路由只给渲染进程） |
 | `backTtlMs` | `1800000` | 一次跳转后，返回按钮保留多久 |
+| `childNamePrefix` | `agent-` | 建会话自动注册时的名字前缀 |
+| `taskChannelTtlMs` | `86400000` | 创建者与新会话之间专用通道的存活时长 |
+| `taskChannelIdleMs` | `600000` | 群内信件全部落定后静默多久回收该通道 |
 
 ## 队列协议
 
@@ -88,6 +91,8 @@ Host 半身注册为 `session-bridge` 一行。改过 `.js` 之后必须重新�
 - **投递通道**。通知走 Host 的 `schedule` 服务，在界面上表现为一张自动化任务卡片；`schedule` 不可用时退回 `sessionController.prompt`。已知副作用：宿主每次投递会额外注入一条 `[SCHEDULE CHANGE]`，插件无法抑制。
 - **哨兵**。目标空闲就起 10 秒确认窗，到点重推索引；目标忙则等 idle 边。窗口内对方又忙起来，本次推送作废，节拍从 10 秒缩到 5 秒、3 秒、2 秒（下限 2 秒）。每一拍都写进 `_ledger.json`。
 - **没有回执就转待办**。两侧收到的是同一份三行通知。
+- **建会话会把这一对接通**。`session_init_workspace` / `session_handoff` 成功后自动注册双方（名字取「前缀 + 标题」，标题还没生成时取「前缀 + 会话 ID 尾号」）、建好两边信箱，并开一条 `scope:"task"` 的专用通道，默认 24 小时 TTL。回执里带 `wire` 字段，写明注册了谁、通道 ID 是多少。专用通道不参与交集合并；这对会话一旦要建普通群，通道会被**提升**成普通群而不是再建一个。它会在 TTL 到期，或群内信件全部落定后静默 10 分钟时退休；退休只删群记录，并在 `_ledger.json` 留一行 `channel:retired`。
+- **好友名跟着会话生命周期走**。冷启动扫一次，之后最多每 30 分钟扫一次：会话进了宿主的归档表（`storages/workspace.json` 的 `global.archivedSessionIds`），或从持久化列表里彻底消失超过 10 分钟，对应的好友名就被清掉。持久化返回空表时不清，防止一次读空把整张表抹掉。
 - **群只做路由**。A 与 B 的往返信件超过阈值（默认 3 封）就自动建群；两组群有交集时合并。群按成员表查到会话 ID 直接投递，回执仍走普通来信。
 - **子 agent 会话不能作为推送目标**（`owned by subagent routing`）。信箱只推顶层会话。
 - 工具：`mail_send` · `mail_ack` · `mail_list` · `mail_status` · `mail_group`。
