@@ -2,7 +2,7 @@
 
 Let the sessions inside DeepSeek Harness create each other, jump to each other, and write letters to each other.
 
-[中文](./README.md) · [Architecture](./docs/architecture.html) · Version v0.1
+[中文](./README.md) · [Architecture](https://7nian173.github.io/dsh-session-orchestrator/architecture.html) · Version v0.1
 
 ## What this software does
 
@@ -70,7 +70,7 @@ DSH can add a package to a profile directly, forwarding the arguments to pnpm:
 dsh plugin --profile <profile> add <package or repository URL>
 ```
 
-This needs no extra packaging, but the package must resolve from npm or a reachable repository. It does not work for the desktop profile, which Electron manages exclusively and where `dsh plugin` fails outright. Desktop users install through `plugin_manager` above. The repository is private today and the package is not published to npm, so for now install from the local directory.
+This needs no extra packaging, but the package must resolve from npm or a reachable repository. It does not work for the desktop profile, which Electron manages exclusively and where `dsh plugin` fails outright. Desktop users install through `plugin_manager` above. The repository is public now. The package is not published to npm, and I have not verified an end-to-end install from the repository URL on a non-desktop profile; desktop still installs through `plugin_manager`.
 
 ### For a human
 
@@ -244,7 +244,7 @@ Self-checks (tools/)             three node scripts, one level up
 
 ![Architecture and workflow](./docs/architecture.png)
 
-[Click for the full workflow](./docs/architecture.html)
+[Click for the full workflow](https://7nian173.github.io/dsh-session-orchestrator/architecture.html)
 
 The diagram supports light and dark themes, zoom, and full screen. What follows walks the lines once.
 

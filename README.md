@@ -2,7 +2,7 @@
 
 让 DeepSeek Harness 里的多个会话可以互相创建、互相跳转、互相写信。
 
-[English](./README.en.md) · [架构图](./docs/architecture.html) · 当前版本 v0.1
+[English](./README.en.md) · [架构图](https://7nian173.github.io/dsh-session-orchestrator/architecture.html) · 当前版本 v0.1
 
 ## 这个软件能做什么
 
@@ -70,7 +70,7 @@ DSH 支持在 profile 里直接加包，参数会转发给 pnpm：
 dsh plugin --profile <环境名> add <包名或仓库地址>
 ```
 
-这条命令不需要另做包装，但要求包能从 npm 或可访问的仓库解析到。桌面版走不了这条，profile `desktop` 由 Electron 独占管理，`dsh plugin` 会直接报错，桌面版只能用上面的 `plugin_manager`。当前仓库是私有的，包里也没有发布到 npm，所以现阶段只能从本地目录装。
+这条命令不需要另做包装，但要求包能从 npm 或可访问的仓库解析到。桌面版走不了这条，profile `desktop` 由 Electron 独占管理，`dsh plugin` 会直接报错，桌面版只能用上面的 `plugin_manager`。仓库现在已经公开。这个包还没有发布到 npm，从仓库地址安装这条路我没有在非桌面 profile 上端到端验证过；桌面版仍然只能用 `plugin_manager`。
 
 ### 给人操作
 
@@ -244,7 +244,7 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 ![架构与工作流](./docs/architecture.png)
 
-[完整工作流请点击](./docs/architecture.html)
+[完整工作流请点击](https://7nian173.github.io/dsh-session-orchestrator/architecture.html)
 
 图支持深浅色和缩放，也可以直接全屏。下面按走线讲一遍。
 
