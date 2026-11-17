@@ -6,7 +6,7 @@
  *   node tools/mail-state-repair.mjs <工作区> --apply
  *
  * 只补不删：已有的记录原样保留，缺的按信封头 + 索引补出来。
- * 补出来的记录带 recovered:true，正文取自信封，会话 id 取自索引。
+ * 只补收信方那一份（有 <id>.to.md 的工作区），补出来的记录带 recovered:true。
  */
 import { readFile, readdir, writeFile, rename } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -38,7 +38,7 @@ function statusFrom(pathOfCode) {
   const code = String(pathOfCode || '').split('>').filter(Boolean).pop()
   if (code === 'D') return 'done'
   if (code === 'B') return 'blocked'
-  if (code === 'R') return 'acked'
+  if (code === 'R') return 'delivered'
   return 'pending'
 }
 
@@ -62,6 +62,8 @@ const added = []
 for (const [id, entry] of Object.entries(index)) {
   if (known.has(id)) continue
   const sides = byId.get(id) || {}
+  // 记录只存在收信方工作区；没有 to.md 说明这里只是发信方副本
+  if (!sides.to) continue
   const file = sides.to || sides.from
   if (!file) continue
   const parsed = parseEnvelope(await readFile(file, 'utf8'))
