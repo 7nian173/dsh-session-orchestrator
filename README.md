@@ -77,28 +77,32 @@ plugin's own queue still works because everything runs in the Host).
 - No credentials, no tokens: the queue directory is the authorization boundary.
 - Session ids and preset ids are always parameters; nothing is bound to a particular user or project.
 
-## Mailbox (five directories)
+## Mailbox (push-first, event driven)
 
-A five-directory mailbox (`已接收 / 处理中 / 已发送 / 待办 / 已解决`, statuses
-`pending / running / awaiting_ack / blocked / done`) on top of the same queue:
+A mailbox that lives in the plugin, not in folders. One state file, one archive copy per letter:
 
 ```
-<mailRoot>/<owner>/<peer>/<five dirs>/<mail_id>.md
-<mailRoot>/_inflight/<mail_id>.json     ← on-disk ledger: deadline / acked / blocked
-<mailRoot>/_seq.json                    ← M-YYYYMMDD-NNNN counter (local date)
+<mailRoot>/mailbox.json          ← the only state: letters[] + per-day sequence
+<mailRoot>/archive/<mail_id>.md   ← written once, never moved (audit trail)
 ```
 
-- `mail_send` writes one copy to the sender's `已发送/` (awaiting_ack) and one to the
-  receiver's `已接收/` (pending), records a deadline on disk, then pushes the letter
-  into the receiver session (`peerSessionId`, optional).
-- `mail_ack` moves both copies to `处理中/`; `close: true` moves them to `已解决/`.
-- **No reply → 待办**: a letter whose deadline passes without an ACK is moved to `待办/`
-  on both sides and the sender session gets a `S-TODO-NOTICE`. The deadline lives on
-  disk, so a Harness restart does not lose the clock. A busy model does not raise on
-  delivery, so the ACK timeout — not a delivery error — is the判定.
-- Tools: `mail_send` / `mail_ack` / `mail_list`. Queue actions: the same three names.
-- Config: `mailRoot` (default `$DSH_HOME/mail`), `ackTimeoutMs` (default 300000; one
-  letter may override it with `timeoutMs`).
+Status ladder: `pending → pushed → delivered → acked`, plus `blocked` (待办) and `done`.
+
+- **Push first.** `mail_send` appends a letter, pushes it into the target session with a
+  receipt marker `〔信箱·<mail_id>〕`, and records a deadline (default 300 s; one letter may
+  override with `timeoutMs`).
+- **Delivered = the target actually saw it.** A Host `agent/pre-step` hook watches the
+  admitted messages; when the receipt marker enters a real step of the target session the
+  letter becomes `delivered` and its timer is cancelled. A busy model simply keeps the
+  letter queued — no error, no polling.
+- **Sentinel.** On an `agent/status` idle edge for the target session, undelivered letters
+  are pushed again (and, from the second attempt on, with a one-line reminder). There is no
+  interval scan: every letter owns one `setTimeout`, and a cold-start sweep catches letters
+  that expired while the process was down.
+- **No reply → 待办.** If the deadline passes without a receipt, the letter becomes
+  `blocked` and **both** the sending and the receiving session are notified.
+- Tools / queue actions: `mail_send` · `mail_ack` · `mail_list`.
+- Config: `mailRoot` (default `$DSH_HOME/mail`), `ackTimeoutMs` (default 300000).
 
 ## License
 
