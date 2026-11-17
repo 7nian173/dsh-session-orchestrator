@@ -1,141 +1,308 @@
 # dsh-session-bridge
 
-[中文](./README.md) · Architecture [docs/architecture.html](./docs/architecture.html)
+Let the sessions inside DeepSeek Harness create each other, jump to each other, and write letters to each other.
 
-A file-queue bridge **and a workspace mailbox** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) sessions.
-Everything runs inside the Host process: no shell, no HTTP auth, no network listener of its own.
+[中文](./README.md) · [Architecture](./docs/architecture.html) · Version v0.1
 
-It does five things:
+## What this software does
 
-1. **Deliver a prompt** into another session and wake it if idle.
-2. **Create workspaces and stage sessions** (`session_init_workspace`, `session_handoff`).
-3. **Queue one-shot UI navigation** (`session_jump`) that the companion browser half performs.
-4. **Mailbox**: letters that live in the *workspace*, pushed as a short index notice — never the body.
-5. **Session groups**: a routing table of session ids, with automatic creation and intersection merge.
+Once installed, your sessions gain three abilities.
 
-## Why a file queue
+**Start a new session.** Create a workspace and its first session from a preset, handing over the directory, the opening task, and the title in one call. No manual window opening, no directory switching, no preset picking.
 
-DSH exposes no public "notify a script" API, and a script outside the Host cannot reach `ctx.sessionController`.
-The queue is the smallest honest IPC: JSON files in one directory, atomic rename, an outbox result per request.
-It is also the trust boundary — whoever can write the queue can drive sessions, so keep it inside your workspace or `$DSH_HOME`.
+**Jump to another session.** When an assistant reply mentions a session id, an "Open session" button appears under that message. One click switches to it. In the session you land in, a "Back to creator" button shows up in the bottom left corner, right next to the sandbox permission switch. One click returns you to the session that created it. Both buttons are one-shot, so they never linger after a refresh.
 
-> The Desktop build refuses non-renderer HTTP requests (`403 Browser access is disabled`), so the routes below are
-> for the bundled browser half only. **External programs talk to the queue, not to HTTP.**
+**Write a letter.** Send a letter to another session. The body is written into a file inside the workspace, and the receiver gets only an index entry naming the source, the path, and the current state. Whether to read the body is up to it. A letter with no receipt turns into a to-do when the window expires, moves to in-progress on a receipt, and is archived on close. After a few round trips between the same pair of sessions, a group forms automatically and later letters between them route through it.
+
+Creating a session wires those three things together. Both sides register into the friends table, each workspace gets its mailbox, and a dedicated channel opens between the two of you, valid for 24 hours by default.
+
+## Quick start
+
+After installing, three steps are enough for a first run.
+
+```
+# 1. Register a name for yourself. Registration also creates the workspace mailbox
+session_register_name  name=lead
+
+# 2. Write to another session. peerSessionId is that session's id
+mail_send  owner=lead  peer=reviewer  type=S-PROGRESS  body="please review this build"  peerSessionId=session-xxxx
+
+# 3. Check where the letter got to
+mail_status  mailId=M-20261017-0001
+```
+
+The third call returns `fromPath` and `toPath`, for example `A>R>D` and `P>R>D`, which records the path the letter took on the sending and the receiving side.
+
+External programs do not use these tools. They drop files into the queue, as described under "Two entry points" below.
+
+## What it needs
+
+- A running DSH Desktop. The Host services it uses are `sessionController`, `sessionPersistence`, `schedule`, and `webServer`.
+- An absolute path to the plugin directory. The path may contain non-ASCII characters.
+- No third-party runtime dependencies. Only the Node that ships with the system.
+- Write access to the queue directory (default `$DSH_HOME/session-bridge`) and to the workspace directories. The queue carries cross-session delivery (`session-bridge/`), the workspace stores letters (`.dsh-mail/`).
+- Matching Host events: `agent/pre-step` and `agent/status`. Missing either one breaks receipts and the sentinel.
 
 ## Install
 
+### For an AI to run
+
+Install once:
+
 ```
-plugin_manager action=install_bundle target=<absolute path of this directory>
+plugin_manager action=install_bundle target=<absolute path to the plugin directory>
 ```
 
-The Host half registers as row `session-bridge`. Changing `.js` files needs a real remount
-(`remove_bundle` then `install_bundle`) — toggling `enabled` does **not** reload modules.
+After editing any `.js`, a reload is mandatory. The two commands cannot be reversed:
 
-## Config
+```
+plugin_manager action=remove_bundle target=dsh-session-orchestrator
+plugin_manager action=install_bundle target=<absolute path to the plugin directory>
+```
 
-| field | default | meaning |
+The only proof of success is `application` equal to `applied` in the receipt. Logs and process presence do not count.
+
+### Command line (non-desktop profiles)
+
+DSH can add a package to a profile directly, forwarding the arguments to pnpm:
+
+```
+dsh plugin --profile <profile> add <package or repository URL>
+```
+
+This needs no extra packaging, but the package must resolve from npm or a reachable repository. It does not work for the desktop profile, which Electron manages exclusively and where `dsh plugin` fails outright. Desktop users install through `plugin_manager` above. The repository is private today and the package is not published to npm, so for now install from the local directory.
+
+### For a human
+
+1. Put the plugin directory somewhere it will not be moved. Moving it breaks the `link:` entry in the profile and forces a reinstall.
+2. Install that directory from the DSH plugin panel, or let the assistant run the two commands above. You should see a row named `session-bridge` at version `0.1.0`.
+3. Do not just flip the switch after changing code. `set_bundle enabled=false → true` does not reload modules. The interface looks unchanged while the old copy keeps running. Always uninstall and reinstall.
+4. A client-side change needs one full page refresh. One refresh is enough; no application restart.
+5. To confirm the install, send a letter and check that `push.via` in the receipt is `schedule` and that `mailBox` points at a real workspace path.
+
+## Configuration
+
+| Field | Default | Purpose |
 |---|---|---|
-| `dir` | `''` → `$DSH_HOME/session-bridge` | queue root |
-| `pollMs` | `1000` | scan interval |
-| `replyTimeoutMs` | `180000` | default wait for one turn of reply |
-| `maxReplyChars` | `8000` | reply truncation |
+| `dir` | `''` (meaning `$DSH_HOME/session-bridge`) | Queue root directory, with its six subdirectories |
+| `pollMs` | `1000` | Queue scan interval |
+| `replyTimeoutMs` | `180000` | Default wait for one turn of reply |
+| `maxReplyChars` | `8000` | Reply truncation length |
 | `deliverMode` | `queue` | `queue` or `steer` |
-| `maxConcurrent` | `4` | requests handled at once |
-| `parseAttempts` | `3` | in-place parse retries for half-written files |
-| `parseRetryDelayMs` | `400` | delay between retries |
-| `autoJump` | `true` | allow queued UI navigation |
-| `allowCrossWorkspace` | `false` | let friends reach across workspaces |
-| `ackTimeoutMs` | `300000` | letter → 待办 after this long without a receipt |
-| `notifyToken` | `''` | shared token for `POST /session-bridge/notify` (renderer-only route) |
-| `backTtlMs` | `1800000` | how long a recorded jump keeps offering the 返回创建者 button |
-| `childNamePrefix` | `agent-` | prefix for names auto-registered on session creation |
-| `taskChannelTtlMs` | `86400000` | TTL of the dedicated creator↔child channel |
-| `taskChannelIdleMs` | `600000` | retire a channel when every letter settled and stayed idle this long |
+| `maxConcurrent` | `4` | Requests handled at once |
+| `parseAttempts` | `3` | Retries when a request file is half written |
+| `parseRetryDelayMs` | `400` | Delay between retries |
+| `autoJump` | `true` | Allow queued interface navigation |
+| `allowCrossWorkspace` | `false` | Let friends reach across workspaces |
+| `ackTimeoutMs` | `300000` | Without a receipt in this window, the letter becomes a to-do |
+| `notifyToken` | `''` | Shared token for `/session-bridge/notify`, empty means no check |
+| `backTtlMs` | `1800000` | How long a jump keeps offering the back button |
+| `childNamePrefix` | `agent-` | Name prefix used when a new session registers automatically |
+| `taskChannelTtlMs` | `86400000` | Lifetime of the dedicated channel between creator and child |
+| `taskChannelIdleMs` | `600000` | Idle time before a channel whose letters all settled is retired |
 
-## Queue protocol
+## Two entry points
 
-```
-<root>/inbox/<id>.json        request   (write <id>.json.tmp then rename)
-<root>/working/<id>.<x>.json  claimed, in flight
-<root>/outbox/<id>.json       result    (always written, atomically)
-<root>/done/<id>.json         finished  (also the idempotency ledger)
-<root>/failed/<id>.json       failure copy
-<root>/heartbeat.json         liveness
-```
+External programs and agents use the same capabilities through different doors.
 
-Actions: `deliver`, `sessions`, `events`, `init_workspace`, `handoff`, `notify`, `relay`, `list_children`,
-`jump`, `delete_workspace`, `probe_workspace_stream`, `mail_send`, `mail_ack`, `mail_list`, `mail_status`, `mail_group`.
+### The file queue, for external programs
 
-A finished request id is never processed twice: retry with the same `id` returns the first result.
-
-## Model tools
-
-`session_init_workspace` · `session_handoff` · `session_jump` · `session_register_name` · `session_list_names` ·
-`session_tell` · `mail_send` · `mail_ack` · `mail_list` · `mail_status` · `mail_group`
-
-## Browser routes (same origin, browser peers only)
-
-`/session-bridge/client-report` · `/jump` · `/jump-used` · `/back` · `/back-consume` · `/jump-record` ·
-`/auto-jump` · `/auto-jump-used` · `/notify`
-
-`返回创建者` appears **only** after a real jump: `/jump-record` writes
-`jumps/links/<session>.json` with `source:'jump'`; `/back` refuses anything else (no `parentSession` fallback),
-and the client calls `/back-consume` the moment it renders, so a refresh never grows the button again.
-
-## Mailbox (v6: everything rooted in the workspace)
+No login state, no listening port. Drop JSON into one directory, read the result from another.
 
 ```
-<workspace>/.dsh-mail/
-    _letters.json                this workspace's letter state
-    envelope/<mail_id>.<side>.md one body per side (from / to) — the letter is never copied into chat
-    _index.json                  state index: per-side letter path
-    _ledger.json                 append-only trail (send / delivery / sentinel beats / block)
-    group.json                   session-group routing table
+<root>/inbox/<id>.json        receive (inbox)     request, write .tmp then rename
+<root>/working/<id>.<x>.json  in flight (working) claimed and running
+<root>/outbox/<id>.json       collect (outbox)    result, always written, atomic
+<root>/done/<id>.json         done (done)         also the idempotency ledger
+<root>/failed/<id>.json       failed (failed)     failure copy
+<root>/heartbeat.json         heartbeat           liveness timestamp
 ```
 
-- **Registration gated.** No registered session in a workspace → no `.dsh-mail`, no files at all.
-- **Notice is an index, not the body.** A delivery carries three lines: source, location, state.
-  The agent reads the envelope file itself if it wants the text.
-- **State ↔ directory ↔ letter.** `A` 已发送 (awaiting_ack) · `P` 已接收 (pending) · `R` 处理中 (running) ·
-  `B` 待办 (blocked) · `D` 已解决 (done). A path such as `A>R>D` / `P>R>D` records what the letter went through;
-  paths only append, never retreat.
-- **Delivery channel.** Notices go through the Host `schedule` service, so they arrive as a normal 自动化任务 card.
-  Falling back to `sessionController.prompt` when `schedule` is unavailable.
-  Known side effect: the Host adds one `[SCHEDULE CHANGE]` context inject per delivery; the plugin cannot suppress it.
-- **Sentinel.** Target idle → 10 s confirm window → re-push the index. Target busy → wait for the idle edge.
-  Busy again inside the window → drop it and shrink the cadence `10s → 5s → 3s → 2s` (floor 2 s).
-  Every beat is written to `_ledger.json`.
-- **No receipt → 待办.** Both sides get the same three-line notice.
-- **Creating a session wires the pair.** `session_init_workspace` / `session_handoff` register both sides
-  (name = prefix + title, or prefix + session id tail when the title is not there yet), create both mailbox
-  boxes, and open one dedicated `scope:"task"` channel with a 24 h TTL. The result carries a `wire` field.
-  A dedicated channel never joins a merge, and is promoted to an ordinary group the moment a normal group
-  is requested for that pair. It retires on TTL, or once every letter of the pair settled and stayed idle
-  10 minutes; retirement removes only the group record and leaves one `channel:retired` line in `_ledger.json`.
-- **Friend names follow session lifecycle.** A sweep (cold start, then at most every 30 minutes) drops a
-  registered name when its session is in the host archive registry (`storages/workspace.json` →
-  `global.archivedSessionIds`) or vanished from persistence for more than 10 minutes. An empty persistence
-  snapshot never clears the table.
-- **Groups are routing only.** `A↔B` round-trips crossing the threshold (default 3) create a group; groups merge
-  on set intersection (`SA ∩ SC ≠ ∅`). Group members route delivery by session id; acknowledgements still travel
-  as ordinary letters.
-- **Subagent sessions cannot be push targets** (`owned by subagent routing`). The mailbox only pushes to top-level sessions.
-- Tools: `mail_send` · `mail_ack` · `mail_list` · `mail_status` · `mail_group`.
+Available actions are `deliver`, `sessions`, `events`, `init_workspace`, `handoff`, `notify`, `relay`, `list_children`, `jump`, `delete_workspace`, and `probe_workspace_stream`; mailbox actions are `mail_send`, `mail_ack`, `mail_list`, `mail_status`, and `mail_group`. One id is never processed twice, so retrying with the same id returns the first result.
 
-## Maintenance
+### Model tools, for agents
+
+Eleven in total.
+
+| Tool | Purpose |
+|---|---|
+| `session_init_workspace` | Create a workspace and start its first session |
+| `session_handoff` | Hand off to a new session under a different preset |
+| `session_jump` | Queue a one-shot interface navigation |
+| `session_register_name` | Register a name in the current workspace, creating its mailbox |
+| `session_list_names` | List registered names |
+| `session_tell` | Send a short direct message to a registered name |
+| `mail_send` | Write a letter |
+| `mail_ack` | Acknowledge a letter; `close` settles it |
+| `mail_list` | List letters by owner |
+| `mail_status` | Path taken, owning group, overdue flag for one letter |
+| `mail_group` | Create or list groups, or fetch workspace candidates |
+
+## How a letter travels
+
+The mailbox lives inside the workspace, one set per workspace.
+
+```
+<workspace>/.dsh-mail/            mailbox directory (.dsh-mail/)
+    _letters.json                 letter state: every letter in this workspace
+    envelope/<mail_id>.<side>.md  letter bodies: one per side, side is from or to
+    _index.json                   path index: the letter sequence for each side
+    _ledger.json                  event trail: append-only, never rewritten
+    group.json                    group table: members and dedicated channels
+```
+
+State, directory, and letter map to each other in a fixed way.
+
+| Letter | State | Meaning |
+|---|---|---|
+| `A` | 已发送 (sent) | Left the sender, waiting for a receipt |
+| `P` | 已接收 (received) | Arrived at the other side, untouched |
+| `R` | 处理中 (in progress) | The other side started working on it |
+| `B` | 待办 (to-do) | Could not be delivered, or nobody answered in time |
+| `D` | 已解决 (done) | Settled |
+
+Paths only append. The sender typically walks `A>R>D` and the receiver `P>R>D`; a stall in the middle shows up as a branch such as `A>B`.
+
+Delivery itself carries three lines of index, and the body stays in the envelope file. Only after the other side reads it and sends a receipt does the index move from received to in progress. Past `ackTimeoutMs` without a receipt, both sides get a to-do notice.
+
+More than the threshold of round trips between the same pair (three by default) forms a group automatically, and two groups that share a member merge into one. The dedicated channel opened when a session is created is a different thing: it carries `scope=task`, never joins a merge, and retires when a member is archived, when its TTL expires, or when every letter in it settled and stayed idle for ten minutes. Retirement removes the group record and leaves one trail entry.
+
+## Maintenance and self-checks
 
 ```
 node tools/mail-test.mjs                 # v3 contract suite
-node tools/mail-push-test.mjs            # push / sentinel / groups / workspace boxes (28 checks)
-node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json paths from _ledger.json (--dry-run first)
+node tools/mail-push-test.mjs            # push, sentinel, groups, workspace mailbox, 34 checks
+node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json from _ledger.json, run with --dry-run first
 ```
 
-## Security model
+Repairing the index also syncs the `path:` line inside each envelope. The script only adds, never deletes, so repeated runs converge on the same result.
 
-- No network listener of its own; routes ride the Host web server and only answer browser peers.
-- No credentials beyond the optional `notifyToken`: the queue directory is the authorization boundary.
-- Session ids and preset ids are always parameters; nothing is bound to a particular user or project.
+## Troubleshooting
+
+Find the line that matches what you see and do what it says.
+
+### A letter will not go out
+
+**The receipt says `NO_MAILBOX`.** No session in the target workspace has registered yet, so no mailbox exists there. Have the other side run `session_register_name` once, or use `/拉群` to register it automatically.
+
+**The receipt says `UNRESOLVED`.** The name you gave is neither a registered name nor a workspace session title. The response carries a candidate list for this workspace; pick one and send again.
+
+**The receipt says `SENDER_NOT_REGISTERED`.** You passed `senderSessionId` but that identity was never registered. Register first, or drop the field. This restriction is deliberate.
+
+**The receipt says `owned by subagent routing`.** The target is a sub-agent session, and the Host refuses pushes to it. Use its parent session, or ask the parent to forward.
+
+**The receipt has `queued` false with reason `no-controller`.** The Host service is not ready yet. Wait for the plugin to finish remounting and try once more rather than retrying in a loop.
+
+### The letter left but nothing happened
+
+**No card appears in the other session.** Check `toPath` in `mail_status` first. If it contains `P`, the letter is on disk but never reached the other context. Then check `push.via` in the sending receipt: `prompt` means the `schedule` service was unavailable and delivery fell back.
+
+**It stays at `P` forever.** That is expected until the other side reads it. Past `ackTimeoutMs` without a receipt it becomes `B`, and both sides get a to-do notice.
+
+**The other side says it received nothing.** Have it look in its own letter body directory (`.dsh-mail/envelope/`). If the file is there, the letter landed and simply never entered its context.
+
+### The button is missing, or never goes away
+
+**"Open session" never appears.** The message body has no `sa-session:<id>` marker, or that marker was already used once. A used marker never comes back, even after a refresh.
+
+**"Back to creator" never appears.** This visit was not caused by a real jump. Manually switching sessions in the left column does not count; only a button click or an automatic jump does.
+
+**The button reappears after a refresh.** The browser half is still the old copy. Do one full page refresh.
+
+**The button never disappears.** It expires by itself after `backTtlMs`, and clicking it consumes it immediately.
+
+### Installed, but nothing changed
+
+**Code changed, behaviour did not.** You only flipped the `set_bundle` switch, so modules were not reloaded. Run `remove_bundle` and then `install_bundle`.
+
+**No `session-bridge` row in the plugin list.** The install used a relative path. Use the absolute path to the plugin directory.
+
+**The Host reports `HMR transactions cannot be nested` on startup.** A previous reload did not finish unwinding. Wait a moment before remounting, or restart the application once.
+
+### External programs cannot reach it
+
+**The request returns 403 with `Browser access is disabled`.** Desktop rejects HTTP requests from anything other than the renderer, so `/session-bridge/*` routes only serve the browser. External programs must use the file queue.
+
+**Requests dropped into the queue do nothing.** Check whether `time` in `<root>/heartbeat.json` is still advancing. If it is not, the plugin is not running; confirm its row in the plugin list is enabled.
+
+### One extra injection every time
+
+**`[SCHEDULE CHANGE]` shows up in the context.** The Host adds it on every delivery, about 97 tokens measured. The plugin cannot suppress it; it is a fixed cost of using the `schedule` channel.
+
+## Project layout
+
+```
+Host half (lib/index.js)         queue, tool registration, same-origin routes, friends table, session orchestration
+Mailbox engine (lib/mail.js)     state machine, letter storage, index, trail, groups and dedicated channels
+Browser half (lib/client.js)     jump button and back button
+Mount entry (cordis.patch.yml)   row id is session-bridge
+Architecture (docs/)             diagram and generation receipts
+Self-checks (tools/)             three node scripts, one level up
+```
+
+## Architecture and workflow
+
+![Architecture and workflow](./docs/architecture.png)
+
+[Click for the full workflow](./docs/architecture.html)
+
+The diagram supports light and dark themes, zoom, and full screen. What follows walks the lines once.
+
+External programs write requests into the queue receive directory (`inbox/`), and the dispatcher claims them and routes by action. Agents call tools and land on the same dispatcher without touching files.
+
+Creating a session goes through `sessionController.create`. On success the plugin writes a jump record, the browser half polls it and switches the page, and the credential for "Back to creator" is stored at the same time.
+
+Writing a letter goes through the mailbox engine. The engine lands both envelopes in their own workspaces, updates the path index and the trail, then hands a three-line index to the `schedule` service for delivery. Once the target reads it and acknowledges, the index moves from received to in progress, and to done on close.
+
+## What it costs you
+
+This plugin works inside other people's workspaces, so a few things are worth knowing up front.
+
+**It creates directories and files in the target workspace.** The other side merely receives a letter, yet a mailbox directory (`.dsh-mail/`) appears locally, holding state, index, trail, and both letter bodies. Sessions that never register are untouched; once one registers, the directory is created.
+
+**The envelope header belongs to the plugin, and hand edits get overwritten.** The fields `mail_id`, `side`, `status`, `path`, and `dir_owner` are maintained by the plugin, and `status` and `path` are rewritten on every state change. Edit the body if you like, but leave the header alone.
+
+A real envelope looks like this.
+
+```
+---
+mail_id: M-20261117-0009
+type: S-PROGRESS
+from: lead
+to: std-verify
+timestamp: 2026-11-17T06:13:54.281Z
+status: 处理中
+side: to
+dir_owner: session-8ce66a91-91ee-46f8-9b8d-991e012035d0
+path: P>R
+---
+v0.1.0 live test: the body lives only in the envelope file, MARKER-OCTRL-001.
+```
+
+**It rewrites the friends table shared by the whole profile.** Creating a session writes a name into `friends.json`, and archiving a session removes it. That table is not private to any single session.
+
+**It pushes messages into the target session.** At least once per letter, appearing in the other context as an automation task card. Beyond that card the Host injects one `[SCHEDULE CHANGE]`, about 97 tokens measured. A sentinel re-push starts another round. With many letters the cost adds up.
+
+**It creates temporary tasks in the Host automation list.** Each notice creates one `after` task, dropped after delivery, and the plugin periodically deletes ended tasks in batches.
+
+**It writes jump records.** Every jump leaves a link record and a used marker in the jump record directory (`session-bridge/jumps/`), which is what decides whether the button appears.
+
+## Version
+
+v0.1.0, first release, 2026-11-17.
 
 ## License
 
-[CC BY-NC 4.0](./LICENSE). You may modify and redistribute, including modified versions, as long as you keep the attribution and do not use the work for commercial purposes. Commercial licensing is available from the copyright holder on request.
+[CC BY-NC 4.0](./LICENSE), Creative Commons Attribution-NonCommercial 4.0 International.
+
+What that means in plain terms.
+
+**You may change it.** You may keep your changes closed, or ship only binaries. Your derivative work can use any license you like, as long as it does not stop downstream recipients from complying with this one.
+
+**You must credit it.** When you distribute, keep the author information and the copyright notice, note what you changed, and include a link to the license. Please also keep the original repository address.
+
+**You may not sell it.** Commercial means use primarily intended for commercial advantage or monetary compensation. Personal study, research, internal trials, and non-profit team work are unrestricted.
+
+Two caveats. Creative Commons licenses are written for works rather than for software, so using one here is workable but not standard. A license with a NonCommercial clause is not an OSI-approved open source license, so describe this repository as source-available rather than open source.
+
+For commercial licensing, contact the author. If you would rather use a license designed for software with the same commercial restriction, PolyForm Noncommercial 1.0.0 is the closest fit, though it carries no attribution requirement by default and would need an added credit clause.
