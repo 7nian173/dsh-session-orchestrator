@@ -2,7 +2,7 @@
 
 让 DeepSeek Harness 里的多个会话可以互相创建、互相跳转、互相写信。
 
-[English](./README.en.md) · 架构图 [docs/architecture.html](./docs/architecture.html)
+[English](./README.en.md) · [架构图](./docs/architecture.html) · 当前版本 v0.1
 
 ## 这个软件能做什么
 
@@ -16,13 +16,32 @@
 
 开新会话的时候，上面三件事自动接上。双方互相注册进好友表，各自的工作区里建好信箱，再开一条只给他们两人用的专用通道，默认 24 小时有效期内随时能来回通信。
 
+## 快速开始
+
+装好之后第一次用，走这三步就够。
+
+```
+# 1. 给自己登记一个名字，注册的同时会建好工作区信箱
+session_register_name  name=lead
+
+# 2. 给另一个会话写信。peerSessionId 是对方的会话编号
+mail_send  owner=lead  peer=reviewer  type=S-PROGRESS  body="这一版看下"  peerSessionId=session-xxxx
+
+# 3. 看这封信走到哪了
+mail_status  mailId=M-20261017-0001
+```
+
+第三步的返回里会带 `fromPath` 与 `toPath`，比如 `A>R>D` 和 `P>R>D`，这就是这封信在发信方和收信方各自走过的路。
+
+外部程序不用这些工具，直接往队列里投文件即可，写法见下面的「两条入口」。
+
 ## 装它需要什么
 
 - 一个跑起来的 DSH Desktop。插件用到的宿主服务是 `sessionController`、`sessionPersistence`、`schedule`、`webServer`。
 - 插件目录的绝对路径，路径里可以有中文。
 - 没有第三方运行时依赖，只用系统自带的 Node。
 - 队列目录（默认 `$DSH_HOME/session-bridge`）和工作区目录都要能写。
-- 宿主事件的版本要对得上：`agent/pre-step`、`agent/status` 两个钩子缺一个，回执与哨兵就不工作。
+- 宿主事件要对得上：`agent/pre-step`、`agent/status` 两个钩子缺一个，回执与哨兵就不工作。
 
 ## 安装
 
@@ -76,7 +95,9 @@ plugin_manager action=install_bundle target=<插件目录绝对路径>
 
 外部程序和 Agent 走的是同一套能力，入口不同。
 
-外部程序只碰文件队列，不需要登录态，也不需要端口。
+### 文件队列，给外部程序
+
+不需要登录态，也不需要端口。往一个目录里投 JSON，读另一个目录拿结果。
 
 ```
 <root>/inbox/<id>.json        请求（先写 .tmp 再 rename）
@@ -89,14 +110,83 @@ plugin_manager action=install_bundle target=<插件目录绝对路径>
 
 可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_group`。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
 
-Agent 直接用工具，共 11 个：`session_init_workspace`、`session_handoff`、`session_jump`、`session_register_name`、`session_list_names`、`session_tell`、`mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_group`。
+### 模型工具，给 Agent
 
-## 维护
+共 11 个。
+
+| 工具 | 用途 |
+|---|---|
+| `session_init_workspace` | 建工作区并起一期会话 |
+| `session_handoff` | 按新预设交棒出一个新会话 |
+| `session_jump` | 排队一次界面跳转 |
+| `session_register_name` | 在当前工作区登记名字，顺带建信箱 |
+| `session_list_names` | 列出已登记的名字 |
+| `session_tell` | 给登记过的名字发一条即时口信 |
+| `mail_send` | 写信 |
+| `mail_ack` | 回执，带 close 表示结案 |
+| `mail_list` | 按 owner 列出信件 |
+| `mail_status` | 看某一封走过的路径、所属群、是否逾期 |
+| `mail_group` | 建群、列群，或取本工作区候选会话 |
+
+## 信件怎么流转
+
+信箱落在工作区里，一个工作区一套。
+
+```
+<工作区>/.dsh-mail/
+    _letters.json                这个工作区的信件状态
+    envelope/<mail_id>.<side>.md 两侧各一份信封，side 是 from 或 to
+    _index.json                  每封信每一侧的路径索引
+    _ledger.json                 只追加的留痕
+    group.json                   群与会话路由
+```
+
+状态、目录、字母三者对应关系固定：
+
+| 字母 | 状态 | 含义 |
+|---|---|---|
+| `A` | 已发送 | 已经出手，等回执 |
+| `P` | 已接收 | 到了对端，对方还没动 |
+| `R` | 处理中 | 对方已经开始处理 |
+| `B` | 待办 | 投不出去，或者超时没人回 |
+| `D` | 已解决 | 结案 |
+
+路径只追加不回退。发信方通常走 `A>R>D`，收信方走 `P>R>D`；中途卡住会看到 `A>B` 这样的分支。
+
+投递本身只送三行索引，正文留在信封文件里。对方读过并回执之后，索引才从已接收变处理中。超过 `ackTimeoutMs` 还没有回执，两侧同时收到待办通知。
+
+同一对人来回超过阈值（默认 3 封）会自动结群，有交集的两个群会合并成一个。建会话时开的那条专用通道是另一回事，它带 `scope=task`，不参与合并，成员会话归档、TTL 到期、或者群内信件全部落定后静默十分钟，就退休并在留痕里记一笔。
+
+## 维护与自检
 
 ```
 node tools/mail-test.mjs                 # v3 契约套件
 node tools/mail-push-test.mjs            # 推送、哨兵、群、工作区信箱，34 项
 node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json，先加 --dry-run
+```
+
+索引修好后信封里的 `path:` 行会一起同步。这个脚本只补不删，跑多少遍结果一样。
+
+## 故障排查
+
+| 现象 | 原因与处理 |
+|---|---|
+| `NO_MAILBOX` | 目标工作区里没有任何已注册会话。先让对方 `session_register_name` |
+| `UNRESOLVED` | 名字对不上任何已注册名或左栏标题。返回体里带候选列表，挑一个再发 |
+| `SENDER_NOT_REGISTERED` | 带 `senderSessionId` 却没用这个身份登记过。这是故意的限制 |
+| `owned by subagent routing` | 目标是个子 agent 会话。信箱只推顶层会话 |
+| `queue:false` 且 `no-controller` | 宿主服务没就绪，等插件重新挂载后再试 |
+| 按钮不出现 | 客户端改动没有整页刷新，或者这次不是真实跳转触发的 |
+
+## 项目结构
+
+```
+lib/index.js     宿主半身。队列、工具注册、同源路由、好友表、会话编排
+lib/mail.js      信箱引擎。状态机、信封落盘、索引、留痕、群与专用通道
+lib/client.js    浏览器半身。跳转按钮与返回按钮
+cordis.patch.yml 挂载入口，行 id 是 session-bridge
+docs/            架构图与生成回执
+tools/           自检脚本（在上一级目录）
 ```
 
 ## 几条容易踩的
@@ -105,10 +195,11 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 - 子 agent 会话不能作为推送目标，宿主会以 `owned by subagent routing` 拒收。信箱只推顶层会话。
 - 每投递一次，宿主会额外注入一条 `[SCHEDULE CHANGE]`。这是 `schedule` 服务自己发的，插件侧消不掉。
 - `mail_status` 里有的老信路径偏短，比如只有 `A>D`，那是记录规则改之前留下的历史，不是算错。
+- 好友名会随会话归档回收。冷启动扫一次，之后最多每 30 分钟一次。空快照时不清表。
 
 ## 架构与工作流
 
-打开 [docs/architecture.html](./docs/architecture.html) 看完整拓扑。图的读法是这样走的。
+打开 [docs/architecture.html](./docs/architecture.html) 看完整拓扑，支持深浅色和缩放。图的读法是这样走的。
 
 外部程序把请求写进 `inbox/`，分发器认领之后按 action 分派。Agent 走工具调用，落在同一个分发器上，只是不用经过文件。
 
@@ -116,7 +207,9 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 
 写信走信箱引擎。引擎先把两侧的信封落到各自工作区，再更新状态索引和留痕，然后把一条三行的索引交给 `schedule` 服务，由它投递到目标会话。目标会话读过之后回执，索引里的路径从已接收变处理中，关闭之后变已解决。
 
-状态字母只用五个，`A` 已发送、`P` 已接收、`R` 处理中、`B` 待办、`D` 已解决。一封信走过的每一步都追加在路径里，`A>R>D` 这样的写法表示发信方从头到尾的经历。
+## 版本
+
+v0.1.0，首个发布版本，2026-11-17。MIT 许可。
 
 ## 许可证
 
