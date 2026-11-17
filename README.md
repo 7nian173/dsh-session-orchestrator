@@ -221,7 +221,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 在仓库根目录跑，只需要 Node，不需要装依赖。
 
 ```
-node tools/mail-push-test.mjs            # 推送、通道、背压、群、工作区信箱，48 项
+node tools/mail-push-test.mjs            # 推送、通道、背压、群、工作区信箱，49 项
 node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json，先加 --dry-run
 ```
 

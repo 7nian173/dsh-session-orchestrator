@@ -143,7 +143,7 @@ queue_seq: 12
 - 目标会话归档：条目直接 `dropped`，信转 `blocked`，`reason: target-archived`。
 - 条目超过 24 小时仍未投出：`dropped`，留痕。
 
-## 12. 测试断言（34 → 48 条，已实现）
+## 12. 测试断言（34 → 49 条，已实现）
 
 1. 同对未结案时 `mail_send` 返回 `PAIR_OUTSTANDING`
 2. `S-ACK` / `S-TODO-NOTICE` 不被背压挡住
@@ -156,7 +156,7 @@ queue_seq: 12
 9. 新实例从 `_courier.json` 恢复 `queued` 条目
 10. 好友表 `state` 反映 running / idle
 
-> 实际结果：原有 34 条里 8 条按新语义重写（哨兵改成通道），新增 14 条，合计 48 条全绿。
+> 实际结果：原有 34 条里 8 条按新语义重写（哨兵改成通道），新增 15 条，合计 49 条全绿。
 
 ## 13. 兼容
 

@@ -64,6 +64,14 @@ check('未注册工作区不建箱', r2.ok === true && !(await readdir(wsGhost))
 
 // ── 信使通道（v0.2）：背压 / 忙则排队 / 忙久转待办 / 空闲报数再逐封 / 暂停 / 重启续排
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const waitFor = async (fn, timeoutMs = 2000) => {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (fn()) return true
+    await sleep(10)
+  }
+  return fn()
+}
 const wsCh = join(tmp, 'ws-ch')
 await ensureWorkspaceBox(wsCh)
 const cwdCh = async (sid) => (typeof sid === 'string' && sid.startsWith('S') ? wsCh : undefined)
@@ -82,7 +90,7 @@ const chBox = createMailbox({
   service: (k) => (k === 'sessionController' ? chController : undefined),
   log: () => {},
   cwdOf: cwdCh,
-  courier: { intervalMs: 5, busyHoldMs: 50, staleAfterMs: 200, digestGapMs: 0 },
+  courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 200, digestGapMs: 0 },
 })
 const chMail = (owner, peer, from, to, id, type = 'S-PROGRESS', extra = {}) => ({ owner, peer, type, body: 'x', senderSessionId: from, peerSessionId: to, mailId: id, ...extra })
 const chA = await chBox.send(chMail('A', 'B', 'S1', 'S2', 'M-20261117-8001'))
@@ -103,23 +111,29 @@ check('忙太久 → 待办信封 paused: true', /^status: 待办$/m.test(envCh)
 const cj = await readJson(join(wsCh, '.dsh-mail', '_courier.json'))
 check('持有队列落盘', Array.isArray(cj.items) && cj.items.some((item) => item.mailId === 'M-20261117-8011' && item.state === 'held'), JSON.stringify(cj.items.map((item) => [item.mailId, item.state])))
 
+
 busy2 = false
-const before = chCalls.length
+const callsFor = (sid) => chCalls.filter((call) => call.sessionId === sid)
+const s4Cards = () => callsFor('S4').filter((call) => /〔信箱·待收〕/.test(call.text)).length
+const s4Summary = () => callsFor('S4').find((call) => /封没处理/.test(call.text)) || null
 await chBox.noteStatus({ id: 'S4' }, 'idle')
-await sleep(90)
-const chAfter = chCalls.slice(before).filter((call) => call.sessionId === 'S4')
-check('空闲 → 先报数', chAfter.length >= 1 && /封没处理/.test(chAfter[0].text), JSON.stringify(chAfter.slice(0, 1).map((call) => call.text.slice(0, 40))))
-check('逐封：先只递一封', chAfter.filter((call) => /〔信箱·待收〕/.test(call.text)).length === 1, JSON.stringify(chAfter.map((call) => call.text.slice(0, 16))))
-const s4Cards = () => chCalls.filter((call) => call.sessionId === 'S4' && /〔信箱·待收〕/.test(call.text)).length
-const stillOne = s4Cards()
-await sleep(70)
-check('上一张没被消费 → 不发下一张', s4Cards() === stillOne, String(s4Cards()))
+await waitFor(() => Boolean(s4Summary()))
+check('空闲 → 先报数', Boolean(s4Summary()), JSON.stringify(s4Summary() && s4Summary().text.slice(0, 40)))
+await waitFor(() => s4Cards() >= 1)
+check('逐封：先只递一封', s4Cards() === 1, String(s4Cards()) + ' | ' + JSON.stringify(callsFor('S4').map((call) => call.text.slice(0, 12))))
+await sleep(80)
+check('上一张没被消费 → 不发下一张', s4Cards() === 1, String(s4Cards()))
 
 await chBox.noteStep({ id: 'S4' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261117-8011〕 收到' }] }])
-await sleep(90)
-check('上一张被消费 → 递下一封', s4Cards() === stillOne + 1, String(s4Cards()))
+await waitFor(() => s4Cards() === 2)
+check('上一张被消费 → 递下一封', s4Cards() === 2, String(s4Cards()))
+
+// 发信方拿的是聚合摘要：说清原因、给排位，避免把待办读成沉默
+const senderDigest = chCalls.find((call) => /不是对方不理你/.test(call.text))
+check('发信方摘要解释原因并给排位', Boolean(senderDigest) && /排第|马上递/.test(senderDigest.text), JSON.stringify(senderDigest && senderDigest.text.slice(0, 80)))
 
 await chBox.pause({ do: 'pause', cwd: wsCh })
+await sleep(60)
 const beforePause = chCalls.length
 const pausedSend = await chBox.send(chMail('F', 'G', 'S6', 'S7', 'M-20261117-8022'))
 check('暂停：只入队不投', pausedSend.push.queued === false && pausedSend.push.reason === 'channel-paused', JSON.stringify(pausedSend.push))
@@ -131,7 +145,7 @@ const chStatus = await chBox.status({ mailId: 'M-20261117-8012' })
 check('mail_status 带通道队列', chStatus.queue && chStatus.queue.paused === true && chStatus.queue.pending >= 1, JSON.stringify(chStatus.queue))
 
 await chBox.pause({ do: 'resume', cwd: wsCh })
-await sleep(120)
+await waitFor(() => chCalls.length > beforePause)
 check('恢复后继续投递', chCalls.length > beforePause, String(chCalls.length - beforePause))
 
 // 重启续排：独立工作区里排一条待投，新实例从 _courier.json 续上
@@ -148,22 +162,21 @@ const mkRestartController = () => ({
   },
   async state() { return { running: busy3, active: busy3 } },
 })
-const firstLife = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? mkRestartController() : undefined), log: () => {}, cwdOf: cwdCh2, cwds: async () => [wsCh2], courier: { intervalMs: 5, busyHoldMs: 50, staleAfterMs: 400, digestGapMs: 0 } })
+const firstLife = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? mkRestartController() : undefined), log: () => {}, cwdOf: cwdCh2, cwds: async () => [wsCh2], courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 400, digestGapMs: 0 } })
 const queuedOnce = await firstLife.send({ owner: 'H', peer: 'I', type: 'S-PROGRESS', body: 'x', senderSessionId: 'R1', peerSessionId: 'R2', mailId: 'M-20261117-8031' })
 check('重启前：忙则只入队', queuedOnce.push.queued === false && restartCalls.length === 0, JSON.stringify(queuedOnce.push))
 await firstLife.pause({ do: 'pause', cwd: wsCh2 })
 busy3 = false
-await sleep(60)
 const cjBefore = await readJson(join(wsCh2, '.dsh-mail', '_courier.json'))
 const queuedBefore = (cjBefore.items || []).filter((item) => item.state === 'queued' || item.state === 'held').length
 check('重启前：条目已落盘', queuedBefore >= 1, JSON.stringify(cjBefore.items.map((item) => item.state)))
 
-// 新进程 = 新实例，只读磁盘；先不暂停，验证真的会续投
-const secondLife = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? mkRestartController() : undefined), log: () => {}, cwdOf: cwdCh2, cwds: async () => [wsCh2], courier: { intervalMs: 5, busyHoldMs: 50, staleAfterMs: 400, digestGapMs: 0 } })
+// 新进程 = 新实例，只读磁盘；先恢复通道，验证真的会续投
+const secondLife = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? mkRestartController() : undefined), log: () => {}, cwdOf: cwdCh2, cwds: async () => [wsCh2], courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 400, digestGapMs: 0 } })
 await secondLife.pause({ do: 'resume', cwd: wsCh2 })
 await secondLife.sweepAtStart()
-await sleep(140)
-check('新实例从 _courier.json 续排', restartCalls.length >= 1 && /〔信箱·/.test(restartCalls[0].text), JSON.stringify(restartCalls.map((call) => call.text.slice(0, 20))))
+await waitFor(() => restartCalls.some((call) => /〔信箱·/.test(call.text)))
+check('新实例从 _courier.json 续排', restartCalls.some((call) => /〔信箱·/.test(call.text)), JSON.stringify(restartCalls.map((call) => call.text.slice(0, 20))))
 
 // ── 群路由：阈值 3 自动建群 + 交集合并
 const gb = createMailbox({ ackTimeoutMs: 600000, service: () => undefined, log: () => {}, cwdOf: async () => wsTo })

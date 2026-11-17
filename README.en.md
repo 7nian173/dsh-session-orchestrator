@@ -221,7 +221,7 @@ More than the threshold of round trips between the same pair (three by default) 
 Run these from the repository root. They need Node and nothing else, no dependency install.
 
 ```
-node tools/mail-push-test.mjs            # push, channel, backpressure, groups, workspace mailbox, 48 checks
+node tools/mail-push-test.mjs            # push, channel, backpressure, groups, workspace mailbox, 49 checks
 node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json from _ledger.json, run with --dry-run first
 ```
 
