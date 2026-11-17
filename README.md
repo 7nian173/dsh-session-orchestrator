@@ -118,6 +118,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `taskChannelTtlMs` | `86400000` | 创建者与新会话之间专用通道的存活时长 |
 | `taskChannelIdleMs` | `600000` | 群内信件全部落定后静默多久回收该通道 |
 | `dispatcher` | `true` | 是否跑队列轮询与同源路由。预设里挂的工具实例要设 `false`，工具调用走文件队列交给正在跑的那个实例 |
+| `backpressureReleaseMs` | `600000` | 软释放：上一封已送达但这么久没 ack，就放行同一对的下一封；`0` 表示只认显式 ack |
 | `courierIntervalMs` | `5000` | 信使通道两条提醒之间的间隔 |
 | `busyHoldMs` | `180000` | 目标一直在任务中超过这么久，信转待办 |
 | `staleAfterMs` | `1800000` | 信封静置超过这么久，允许补一次催收 |
@@ -212,6 +213,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 |---|---|---|
 | 同一会话在途 | 最多 1 张未消费的卡 | 目标一次只跑一轮，多塞的卡只是占位 |
 | 同一对未结案 | 最多 1 封 | 上一封没回执就不许再发；`S-ACK`、`S-TODO-NOTICE` 豁免 |
+| 软释放 | 10 分钟 | 送达后这么久没 ack 就放行，留痕 `backpressure:soft-release`；`0` 关掉，只认显式 ack |
 | 单封催收 | 最多 2 次 | 首次一次，看门狗补一次 |
 
 提醒分两个形态，收信方和发信方看到的不是同一张卡。

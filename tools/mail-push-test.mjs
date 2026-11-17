@@ -100,6 +100,17 @@ check('背压：未结案不许再发', chB.ok === false && chB.error.code === '
 const chAck = await chBox.send(chMail('A', 'B', 'S1', 'S2', 'M-20261117-8003', 'S-ACK', { ackOf: 'M-20261117-8001' }))
 check('S-ACK 豁免背压', chAck.ok === true, JSON.stringify(chAck.error && chAck.error.code))
 
+// 软释放：对方一直不 ack，等过阈值就放行，并留一笔 backpressure:soft-release
+const chSoft = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? chController : undefined), log: () => {}, cwdOf: cwdCh, courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 200, digestGapMs: 0 }, backpressureReleaseMs: 60 })
+await chSoft.send(chMail('P', 'Q', 'S8', 'S9', 'M-20261117-8101'))
+const softBlocked = await chSoft.send(chMail('P', 'Q', 'S8', 'S9', 'M-20261117-8102'))
+check('软释放前仍拦（未到阈值）', softBlocked.ok === false && softBlocked.error.code === 'PAIR_OUTSTANDING', JSON.stringify(softBlocked.error && softBlocked.error.code))
+await sleep(90)
+const softPassed = await chSoft.send(chMail('P', 'Q', 'S8', 'S9', 'M-20261117-8103'))
+check('过阈值 → 软释放放行', softPassed.ok === true && softPassed.released && softPassed.released.mailId === 'M-20261117-8101', JSON.stringify(softPassed.released))
+const softLedger = await readJson(join(wsCh, '.dsh-mail', '_ledger.json'))
+check('软释放留痕', (softLedger.events || []).some((e) => e.note === 'backpressure:soft-release' && e.mail_id === 'M-20261117-8101'), '')
+
 busy2 = true
 const chHeld1 = await chBox.send(chMail('C', 'D', 'S3', 'S4', 'M-20261117-8011'))
 const chHeld2 = await chBox.send(chMail('E', 'D', 'S5', 'S4', 'M-20261117-8012'))

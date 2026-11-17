@@ -118,6 +118,7 @@ It does not work for the desktop profile, which Electron manages exclusively and
 | `taskChannelTtlMs` | `86400000` | Lifetime of the dedicated channel between creator and child |
 | `taskChannelIdleMs` | `600000` | Idle time before a channel whose letters all settled is retired |
 | `dispatcher` | `true` | Run the queue dispatcher and same-origin routes. A tools-only instance mounted in an agent preset sets `false` and forwards tool calls to the running dispatcher over the file queue |
+| `backpressureReleaseMs` | `600000` | Soft release: allow the next letter of the same pair once the outstanding one has been delivered this long without an ACK; `0` means only an explicit ACK releases it |
 | `courierIntervalMs` | `5000` | Gap between two courier notice deliveries |
 | `busyHoldMs` | `180000` | Time a target may stay busy before an undelivered letter is held |
 | `staleAfterMs` | `1800000` | Time an envelope may sit untouched before one extra nudge |
@@ -212,6 +213,7 @@ Three rules.
 |---|---|---|
 | In flight per session | at most 1 unconsumed card | the target runs one turn at a time; extra cards only take up queue space |
 | Open letters per pair | at most 1 | no receipt, no new letter; `S-ACK` and `S-TODO-NOTICE` are exempt |
+| Soft release | 10 minutes | delivered but unacknowledged this long releases the pair, trailed as `backpressure:soft-release`; `0` disables it |
 | Nudges per letter | at most 2 | one initial, one from the stale watchdog |
 
 Reminders come in two forms, and the two sides see different cards.
