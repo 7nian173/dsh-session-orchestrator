@@ -1,0 +1,33 @@
+{
+  "letters": [
+    {
+      "id": "M-20261117-0001",
+      "type": "S-PROGRESS",
+      "from": "lead",
+      "to": "peer",
+      "fromSession": null,
+      "toSession": "session-test-1",
+      "body": "hello",
+      "ackOf": null,
+      "status": "blocked",
+      "sentAt": "2026-11-17T02:27:02.970Z",
+      "pushedAt": "2026-11-17T02:27:02.971Z",
+      "deliveredAt": null,
+      "ackedAt": null,
+      "deadline": 1794882423970,
+      "windowMs": 1000,
+      "push": {
+        "queued": true
+      },
+      "reminders": 0,
+      "blockedAt": "2026-11-17T02:27:03.974Z",
+      "blockReason": "ack-timeout",
+      "notified": [
+        "session-test-1"
+      ]
+    }
+  ],
+  "seq": {
+    "M-20261117": 1
+  }
+}
