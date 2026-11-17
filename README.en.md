@@ -207,7 +207,7 @@ Reminders come in two forms, and the two sides see different cards.
 ```
 (receiver) 〔信箱·待收〕M-20261117-0031
 (sender)   〔信使〕你名下现在 5 封待办：lead 3 封、peer 2 封，最早 41 分钟前。
-           不是对方不理你，是信没被消费或没拿到回执，别等。
+           不是对方不理你 —— 是信没被消费或没拿到回执，别等。
 ```
 
 If the target stays busy, the letter waits in the held queue (`held`) and the envelope header records `paused: true`. When the target goes idle, the channel first reports the count ("you have N unprocessed"), then delivers one at a time, gated by the previous card being consumed. Only when an envelope sits past `staleAfterMs` (30 minutes by default) may one extra nudge go out.
