@@ -13,7 +13,9 @@
     "LICENSE",
     "README.en.md",
     "docs/architecture.html",
-    "docs/architecture.png"
+    "docs/architecture.png",
+    "tools/mail-push-test.mjs",
+    "tools/mail-index-repair.mjs"
   ],
   "keywords": [
     "deepseek-harness",

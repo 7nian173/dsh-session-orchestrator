@@ -35,13 +35,27 @@ mail_status  mailId=M-20261017-0001
 
 外部程序不用这些工具，直接往队列里投文件即可，写法见下面的「两条入口」。
 
-## 装它需要什么
+## 环境依赖
 
-- DeepSeek Harness **0.2.2-rc.1**，桌面壳是 `dsh-desktop-next 2.0.22-next`。这两个号都是从本机正在运行的实例里读出来的，也是当前的适配基线。插件用到的宿主服务是 `sessionController`、`sessionPersistence`、`schedule`、`webServer`。
-- 插件目录的绝对路径，路径里可以有中文。
-- 没有第三方运行时依赖，只用系统自带的 Node。
+插件本体没有自己的进程，它跑在宿主进程里，所以运行时只依赖宿主。下面这张表分开列了「运行时」和「装的时候」两件事，别混着看。
+
+| 依赖 | 运行时 | 安装时 | 说明 |
+|---|---|---|---|
+| DeepSeek Harness **0.2.2-rc.1** | 必须 | 必须 | 宿主。两个版本号都是从本机正在运行的实例里读出来的，是当前的适配基线 |
+| 桌面壳 `dsh-desktop-next 2.0.22-next` | 桌面版必须 | 桌面版必须 | 非桌面 profile 不涉及 |
+| 宿主服务 `sessionController`、`sessionPersistence`、`schedule`、`webServer` | 必须 | 不适用 | 由宿主提供，插件只做可选依赖，缺了对应功能降级 |
+| 宿主事件 `agent/pre-step`、`agent/status` | 必须 | 不适用 | 缺一个，回执与哨兵就不工作 |
+| `@deepseek-ai/schemastery` `~3.19.0` | 必须 | 必须 | 唯一的运行时依赖，装的时候从 npm 下载 |
+| 可访问的 npm registry | 否 | 必须 | 下载上面那个依赖用；离线环境要先把它备好 |
+| pnpm 11 | 否 | 必须 | DSH 自带一份，`plugin_manager` 和 `dsh plugin` 都调它，通常不用单独装 |
+| Node ≥ 18 | 否 | 跑自检脚本时 | 插件本身用宿主内置的 Node；`tools/` 下的脚本和 CLI 需要自己有一个 |
+| Git | 否 | 从仓库地址安装时 | 用本地目录安装不需要 |
+
+另外三条硬要求。
+
+- 插件目录要用绝对路径，路径里可以有中文。
 - 队列目录（默认 `$DSH_HOME/session-bridge`）和工作区目录都要能写。队列负责跨会话投递（`session-bridge/`），工作区负责存信（`.dsh-mail/`）。
-- 宿主事件要对得上：`agent/pre-step`、`agent/status` 两个钩子缺一个，回执与哨兵就不工作。
+- 桌面版的 profile 由 Electron 独占管理，装插件只能走 `plugin_manager`，不能用 `dsh plugin`。
 
 ## 安装
 
@@ -171,8 +185,9 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 ## 维护与自检
 
+在仓库根目录跑，只需要 Node，不需要装依赖。
+
 ```
-node tools/mail-test.mjs                 # v3 契约套件
 node tools/mail-push-test.mjs            # 推送、哨兵、群、工作区信箱，34 项
 node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json，先加 --dry-run
 ```
@@ -239,7 +254,7 @@ node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json�
 浏览器半身（lib/client.js）   跳转按钮与返回按钮
 挂载入口（cordis.patch.yml）  行 id 是 session-bridge
 架构图（docs/）               架构图与生成回执
-自检脚本（tools/）            在上一级目录，三个 node 脚本
+自检脚本（tools/）            两个 node 脚本，仓库内直接跑
 ```
 
 ## 架构与工作流

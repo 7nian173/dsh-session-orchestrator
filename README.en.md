@@ -35,13 +35,27 @@ The third call returns `fromPath` and `toPath`, for example `A>R>D` and `P>R>D`,
 
 External programs do not use these tools. They drop files into the queue, as described under "Two entry points" below.
 
-## What it needs
+## Environment dependencies
 
-- DeepSeek Harness **0.2.2-rc.1**, with the desktop shell `dsh-desktop-next 2.0.22-next`. Both numbers were read from the instance running on this machine and form the current compatibility baseline. The Host services it uses are `sessionController`, `sessionPersistence`, `schedule`, and `webServer`.
-- An absolute path to the plugin directory. The path may contain non-ASCII characters.
-- No third-party runtime dependencies. Only the Node that ships with the system.
+The plugin has no process of its own. It runs inside the Host process, so at runtime it depends on the Host. The table separates runtime from install time; do not read them as one list.
+
+| Dependency | Runtime | Install time | Notes |
+|---|---|---|---|
+| DeepSeek Harness **0.2.2-rc.1** | required | required | The Host. Both version numbers were read from the instance running on this machine and form the compatibility baseline |
+| Desktop shell `dsh-desktop-next 2.0.22-next` | required on desktop | required on desktop | Not involved for non-desktop profiles |
+| Host services `sessionController`, `sessionPersistence`, `schedule`, `webServer` | required | n/a | Provided by the Host; the plugin treats them as optional and degrades per feature |
+| Host events `agent/pre-step`, `agent/status` | required | n/a | Missing either one breaks receipts and the sentinel |
+| `@deepseek-ai/schemastery` `~3.19.0` | required | required | The only runtime dependency, downloaded from npm at install time |
+| A reachable npm registry | no | required | Needed to fetch that dependency; prepare it first in an offline environment |
+| pnpm 11 | no | required | DSH ships one, used by both `plugin_manager` and `dsh plugin`, so usually nothing to install |
+| Node >= 18 | no | for the self-check scripts | The plugin uses the Host's built-in Node; the scripts under `tools/` and the CLI need one of your own |
+| Git | no | when installing from a repository URL | Not needed for a local directory install |
+
+Three hard requirements besides the table.
+
+- Use an absolute path to the plugin directory. The path may contain non-ASCII characters.
 - Write access to the queue directory (default `$DSH_HOME/session-bridge`) and to the workspace directories. The queue carries cross-session delivery (`session-bridge/`), the workspace stores letters (`.dsh-mail/`).
-- Matching Host events: `agent/pre-step` and `agent/status`. Missing either one breaks receipts and the sentinel.
+- The desktop profile is managed exclusively by Electron, so plugins there install only through `plugin_manager`, never `dsh plugin`.
 
 ## Install
 
@@ -171,8 +185,9 @@ More than the threshold of round trips between the same pair (three by default) 
 
 ## Maintenance and self-checks
 
+Run these from the repository root. They need Node and nothing else, no dependency install.
+
 ```
-node tools/mail-test.mjs                 # v3 contract suite
 node tools/mail-push-test.mjs            # push, sentinel, groups, workspace mailbox, 34 checks
 node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json from _ledger.json, run with --dry-run first
 ```
@@ -239,7 +254,7 @@ Mailbox engine (lib/mail.js)     state machine, letter storage, index, trail, gr
 Browser half (lib/client.js)     jump button and back button
 Mount entry (cordis.patch.yml)   row id is session-bridge
 Architecture (docs/)             diagram and generation receipts
-Self-checks (tools/)             three node scripts, one level up
+Self-checks (tools/)             two node scripts, run in place
 ```
 
 ## Architecture and workflow
