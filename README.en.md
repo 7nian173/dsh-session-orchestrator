@@ -191,7 +191,6 @@ Run these from the repository root. They need Node and nothing else, no dependen
 ```
 node tools/mail-push-test.mjs            # push, sentinel, groups, workspace mailbox, 34 checks
 node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json from _ledger.json, run with --dry-run first
-python3 tools/check-docs.py README.md    # typography and prose checks, the same ones CI runs
 ```
 
 Repairing the index also syncs the `path:` line inside each envelope. The script only adds, never deletes, so repeated runs converge on the same result.

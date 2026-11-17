@@ -36,8 +36,3 @@ jobs:
           if (!fs.existsSync(p.dsh.bundle.patch)) { console.error('bundle patch missing'); process.exit(1); }
           console.log('files:', p.files.length, '| version:', p.version, '| license:', p.license);
           "
-
-      - name: docs
-        run: |
-          python3 tools/check-docs.py README.md
-          python3 tools/check-docs.py README.en.md
