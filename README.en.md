@@ -111,7 +111,7 @@ It does not work for the desktop profile, which Electron manages exclusively and
 | `parseRetryDelayMs` | `400` | Delay between retries |
 | `autoJump` | `true` | Allow queued interface navigation |
 | `allowCrossWorkspace` | `false` | Let friends reach across workspaces |
-| `ackTimeoutMs` | `300000` | Without a receipt in this window, the letter becomes a to-do |
+| `ackTimeoutMs` | `300000` | Receipt window. It starts at **delivery** (the card entered one of the target turns) and the letter becomes a to-do if no receipt arrives; undelivered letters count from sending |
 | `notifyToken` | `''` | Shared token for `/session-bridge/notify`, empty means no check |
 | `backTtlMs` | `1800000` | How long a jump keeps offering the back button |
 | `childNamePrefix` | `agent-` | Name prefix used when a new session registers automatically |
@@ -204,6 +204,8 @@ Delivery itself carries three lines of index, and the body stays in the envelope
 ### To-do, courier, and backpressure
 
 Past `ackTimeoutMs` without a receipt a letter turns `B` (to-do). Instead of firing a card at both sides, it is handed to the courier channel.
+
+The clock starts at **delivery**: it runs once the target saw the card in one of its turns (`delivered`); undelivered letters count from sending. Delivery does not stop the clock, which is what keeps a late-consumed letter from waiting forever.
 
 The channel is `<workspace>/.dsh-mail/_courier.json`, one per workspace, strictly serial: one notice at a time, then a `courierIntervalMs` pause (5 seconds by default) before the next. It resumes from the file after a restart.
 

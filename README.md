@@ -111,7 +111,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `parseRetryDelayMs` | `400` | 每次重试的间隔 |
 | `autoJump` | `true` | 允许排队的界面跳转 |
 | `allowCrossWorkspace` | `false` | 允许好友跨工作区 |
-| `ackTimeoutMs` | `300000` | 超过这段时间没有回执，信转待办 |
+| `ackTimeoutMs` | `300000` | 回执窗口。从**送达**（进过对方某一轮）起算，超过仍无回执就转待办；没送达的信从发出起算 |
 | `notifyToken` | `''` | `/session-bridge/notify` 的共享令牌，留空表示不校验 |
 | `backTtlMs` | `1800000` | 一次跳转后，返回按钮保留多久 |
 | `childNamePrefix` | `agent-` | 建会话自动注册时的名字前缀 |
@@ -204,6 +204,8 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 ### 待办、信使与背压
 
 一封信超过 `ackTimeoutMs` 还没拿到回执就转 `B` 待办。这时不再向两侧各撒一张卡，而是交给信使通道。
+
+计时的起点是**送达**：对方某一轮里看见这张卡之后才开始倒计时（`delivered`），没送达的从发出时算。送达后不会停表——否则接近截止才被消费的信永远等不到超时。
 
 通道是 `<工作区>/.dsh-mail/_courier.json`，全局一条，一条一条投，投完等 `courierIntervalMs`（默认 5 秒）再取下一条；重启后从文件接着投。
 

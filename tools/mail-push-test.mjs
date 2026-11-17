@@ -111,6 +111,19 @@ check('过阈值 → 软释放放行', softPassed.ok === true && softPassed.rele
 const softLedger = await readJson(join(wsCh, '.dsh-mail', '_ledger.json'))
 check('软释放留痕', (softLedger.events || []).some((e) => e.note === 'backpressure:soft-release' && e.mail_id === 'M-20261117-8101'), '')
 
+// 送达不是终点：回执窗口从「对方看到」重新起算，delivered 的信仍要能转待办
+const boxT = createMailbox({ ackTimeoutMs: 300, service: (k) => (k === 'sessionController' ? chController : undefined), log: () => {}, cwdOf: cwdCh, courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 3000, digestGapMs: 0 } })
+await boxT.send(chMail('T', 'U', 'S12', 'S13', 'M-20261117-8301'))
+await boxT.noteStep({ id: 'S13' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261117-8301〕' }] }])
+await sleep(60)
+const midT = await boxT.status({ mailId: 'M-20261117-8301' })
+check('送达后先停在 delivered', midT.rows[0] && midT.rows[0].status === 'delivered', String(midT.rows[0] && midT.rows[0].status))
+await sleep(1300)
+const afterT = await boxT.status({ mailId: 'M-20261117-8301' })
+check('送达后仍会超时转待办', afterT.rows[0] && afterT.rows[0].status === 'blocked', String(afterT.rows[0] && afterT.rows[0].status))
+const timerLetter = JSON.parse(await readFile(join(wsCh, '.dsh-mail', '_letters.json'), 'utf8')).letters.find((l) => l.id === 'M-20261117-8301')
+check('转待办留痕 todo_since', Boolean(timerLetter && timerLetter.todoSince), JSON.stringify(timerLetter && timerLetter.todoSince))
+
 busy2 = true
 const chHeld1 = await chBox.send(chMail('C', 'D', 'S3', 'S4', 'M-20261117-8011'))
 const chHeld2 = await chBox.send(chMail('E', 'D', 'S5', 'S4', 'M-20261117-8012'))
