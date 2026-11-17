@@ -1,5 +1,7 @@
 # dsh-session-bridge
 
+![ci](https://github.com/7nian173/dsh-session-orchestrator/actions/workflows/ci.yml/badge.svg) ![release](https://img.shields.io/github/v/release/7nian173/dsh-session-orchestrator)
+
 Let the sessions inside DeepSeek Harness create each other, jump to each other, and write letters to each other.
 
 [中文](./README.md) · [Architecture](https://7nian173.github.io/dsh-session-orchestrator/architecture.html) · Version v0.1
@@ -189,6 +191,7 @@ Run these from the repository root. They need Node and nothing else, no dependen
 ```
 node tools/mail-push-test.mjs            # push, sentinel, groups, workspace mailbox, 34 checks
 node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json from _ledger.json, run with --dry-run first
+python3 tools/check-docs.py README.md    # typography and prose checks, the same ones CI runs
 ```
 
 Repairing the index also syncs the `path:` line inside each envelope. The script only adds, never deletes, so repeated runs converge on the same result.

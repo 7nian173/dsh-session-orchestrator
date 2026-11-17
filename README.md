@@ -1,5 +1,7 @@
 # dsh-session-bridge
 
+![ci](https://github.com/7nian173/dsh-session-orchestrator/actions/workflows/ci.yml/badge.svg) ![release](https://img.shields.io/github/v/release/7nian173/dsh-session-orchestrator)
+
 让 DeepSeek Harness 里的多个会话可以互相创建、互相跳转、互相写信。
 
 [English](./README.en.md) · [架构图](https://7nian173.github.io/dsh-session-orchestrator/architecture.html) · 当前版本 v0.1
@@ -189,6 +191,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 ```
 node tools/mail-push-test.mjs            # 推送、哨兵、群、工作区信箱，34 项
 node tools/mail-index-repair.mjs <cwd>   # 用 _ledger.json 重算 _index.json，先加 --dry-run
+python3 tools/check-docs.py README.md    # 中英排版与文风检查，CI 跑的也是它
 ```
 
 索引修好后信封里的 `path:` 行会一起同步。这个脚本只补不删，跑多少遍结果一样。
