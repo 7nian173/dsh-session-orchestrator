@@ -12,7 +12,8 @@
     "README.md",
     "LICENSE",
     "README.en.md",
-    "docs/architecture.html"
+    "docs/architecture.html",
+    "docs/architecture.png"
   ],
   "keywords": [
     "deepseek-harness",
@@ -23,7 +24,7 @@
     "file-queue",
     "navigation"
   ],
-  "license": "MIT",
+  "license": "CC-BY-NC-4.0",
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

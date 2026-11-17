@@ -138,4 +138,4 @@ node tools/mail-index-repair.mjs <cwd>   # rebuild _index.json paths from _ledge
 
 ## License
 
-MIT
+[CC BY-NC 4.0](./LICENSE). You may modify and redistribute, including modified versions, as long as you keep the attribution and do not use the work for commercial purposes. Commercial licensing is available from the copyright holder on request.
