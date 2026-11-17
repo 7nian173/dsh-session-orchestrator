@@ -213,7 +213,7 @@ Three rules.
 |---|---|---|
 | In flight per session | at most 1 unconsumed card | the target runs one turn at a time; extra cards only take up queue space |
 | Open letters per pair | at most 1 | no receipt, no new letter; `S-ACK` and `S-TODO-NOTICE` are exempt |
-| Soft release | 10 minutes | delivered but unacknowledged this long releases the pair, trailed as `backpressure:soft-release`; `0` disables it |
+| Soft release | 10 minutes | a safety net for the pathological case where a letter sits at `delivered` and never turns to-do (lost timer); the normal path turns it to-do at 5 minutes and releases the pair anyway. Trailed as `backpressure:soft-release`; `0` disables it |
 | Nudges per letter | at most 2 | one initial, one from the stale watchdog |
 
 Reminders come in two forms, and the two sides see different cards.

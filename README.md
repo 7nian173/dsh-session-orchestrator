@@ -213,7 +213,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 |---|---|---|
 | 同一会话在途 | 最多 1 张未消费的卡 | 目标一次只跑一轮，多塞的卡只是占位 |
 | 同一对未结案 | 最多 1 封 | 上一封没回执就不许再发；`S-ACK`、`S-TODO-NOTICE` 豁免 |
-| 软释放 | 10 分钟 | 送达后这么久没 ack 就放行，留痕 `backpressure:soft-release`；`0` 关掉，只认显式 ack |
+| 软释放 | 10 分钟 | 兜底，只覆盖「信停在 delivered 没转待办」的病态路径（定时器丢失之类）；正常路径 5 分钟就转待办、背压随之解除，轮不到它。留痕 `backpressure:soft-release`；`0` 关掉 |
 | 单封催收 | 最多 2 次 | 首次一次，看门狗补一次 |
 
 提醒分两个形态，收信方和发信方看到的不是同一张卡。
