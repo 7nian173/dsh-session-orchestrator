@@ -108,3 +108,54 @@ sessionTitle.refresh(session, signal) // 重试 provider，无 provider 时生�
 倾向 A 加限次与退避：`blocked` 后保留触发器，目标每次转入 idle 补推一次索引，最多 3 次，之后彻底静默，状态与留痕全部照写。
 
 **待定**。补推算不算"骚扰"？对外部团队来说，一封信被推 3 次比漏掉更可接受。
+
+## 6 工作区与会话的清理：自动提议、人工书面确认、可撤回
+
+状态：**功能性待办**（新能力，需求已明确）
+
+**需求**。Agent 探索时经常建出用不上的工作区与会话，例如为了对比方案起了调研员，讨论完发现不需要了。现在只能由人手动收拾。倾向是自动清理，但不能让 Agent 自己决定删东西。
+
+**宿主已给的原语**（逐条核实过契约，不是推测）。
+
+| 方法 | 实际行为 |
+|---|---|
+| `workspaceRegistry.delete(id)` | **只删登记，保留目录与全部会话日志**。顺序表先更新，写失败会回滚；未知 id 是幂等空操作 |
+| `workspaceRegistry.archiveSession(sessionId, {stopActivity?})` | durable 归档。不带 `stopActivity` 时会话必须不在活动状态，否则抛 `WorkspaceActiveSessionError`；带则先写归档再请求停止，唤醒会被 `agent/pre-step` 的归档闸门挡住 |
+| `workspaceRegistry.unarchiveSession(sessionId)` | 撤销归档，回到原位置，不校验会话是否还在 |
+| `workspaceRegistry.create(path, title?)` | 按目录重新登记，同路径重复调用返回已有实体 |
+
+**撤回这件事比预想的简单**。`delete` 本来就不动磁盘，撤销就是把同一个路径 `create` 回来；会话侧有 `unarchiveSession`。所以整套清理**天然可逆**，不需要额外的快照机制。
+
+顺带纠正一个记错的点：`dsh-rewind-lite` 做的是**会话内回退**（撤回对话到某条更早的用户消息）加文件还原，跟工作区登记、会话归档不是一回事，这里用不上它。
+
+**两阶段确认设计**。
+
+```
+第一阶段  session_cleanup propose
+          参数：workspace 路径或 id、要归档的会话 id 列表
+          动作：不执行任何变更，只返回一条待确认文本与一个 intentId
+                文本形如「确认对 <项目> 工作区执行注销登记、并归档 3 个会话？同意请回复：我同意」
+                意图有效期 10 分钟，写进 .dsh-mail/_cleanup.json
+
+第二阶段  session_cleanup confirm
+          参数：intentId + phrase
+          动作：校验三件事后才执行
+                1.intentId 未过期、未被使用
+                2.phrase 与要求文本逐字相等
+                3.当前会话本轮的用户消息里确实出现过该短语
+```
+
+第 3 条是关键：`agent/pre-step` 拿得到本轮消息，只在 `user/message` 里出现短语才算数，Agent 从工具参数里塞一句不算。这样"必须人正式同意"才落得下去。
+
+执行后把 working 内容写 `_ledger.json`（谁提议、谁确认、删了哪个工作区登记、归档了哪些会话、可撤销的方式），便于事后追溯与恢复。
+
+**自动清理的边界**。
+
+- 只**自动提议**，永不自动执行。提议由触发条件驱动：任务专用通道 retirement 后仍有成员会话闲置、会话工作区目录已不存在、同项目重复建了多个工作区且只有一个有信件往来。
+- 提议通过 `schedule` 卡片投给发起方会话，而不是直接弹窗；人若不理，10 分钟后意图自然过期，不做任何变更。
+- 有未读信、有待办信、或会话仍被 pin 的，一律不建议清理。
+
+**风险**。
+
+- `delete` 是登记层删除，界面上的会话会失联；如果人类误同意，恢复靠 `create(path)` 重新登记，但**会话与工作区的归属关系会丢**（`sessionIds` 由 cwd 索引重算，重算结果取决于会话日志仍在不在）。
+- `archiveSession` 带 `stopActivity` 会真的中断正在跑的任务，必须单独再确认一次，不能与普通归档混在同一步。
