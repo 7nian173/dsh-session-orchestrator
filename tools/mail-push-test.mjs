@@ -297,6 +297,54 @@ check('TTL 到期被回收', retired.length === 1 && retired[0].reason === 'ttl'
 const ledRetire = await readJson(join(wsTo, '.dsh-mail', '_ledger.json'))
 check('回收留痕', (ledRetire.events || []).some((e) => e.note === 'channel:retired'), '')
 
+// ── 唤醒门控（v0.3）：普通信只有“排在最前的那封”能叫醒对方，其余只落盘；
+//    阻塞信（待办通知）与加急信照推；mail_inbox 是拉取口。
+const wsGate = join(tmp, 'ws-gate')
+await ensureWorkspaceBox(wsGate)
+const gateCalls = []
+const gateController = {
+  async prompt(req, signal) {
+    if (!signal) throw new Error('signal missing')
+    gateCalls.push({ sessionId: req.sessionId, text: (req.content && req.content[0] && req.content[0].text) || '' })
+    return { ok: true }
+  },
+}
+const gateBox = createMailbox({
+  ackTimeoutMs: 600000,
+  service: (k) => (k === 'sessionController' ? gateController : undefined),
+  log: () => {},
+  cwdOf: async () => wsGate,
+  courier: { intervalMs: 0, busyHoldMs: 0, staleAfterMs: 3000, digestGapMs: 0 },
+})
+const gateMail = (owner, from, to, id, type = 'S-PROGRESS', extra = {}) => ({ owner, peer: 'R', type, body: 'x', senderSessionId: from, peerSessionId: to, mailId: id, ...extra })
+const gate1 = await gateBox.send(gateMail('L1', 'S60', 'S61', 'M-20261118-9100'))
+check('门控：普通首封仍叫醒对方', gate1.status === 'pushed', JSON.stringify(gate1.push))
+await gateBox.noteStep({ id: 'S61' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261118-9100〕 收到' }] }])
+const callsBeforeAck = gateCalls.length
+const gateAck = await gateBox.send(gateMail('L1', 'S60', 'S61', 'M-20261118-9101', 'S-ACK', { ackOf: 'M-20261118-9100' }))
+await sleep(80)
+const courierGate = await readJson(join(wsGate, '.dsh-mail', '_courier.json'))
+const ledGate = await readJson(join(wsGate, '.dsh-mail', '_ledger.json'))
+check(
+  '门控：S-ACK 回执不占对话',
+  gateAck.ok === true && gateCalls.length === callsBeforeAck,
+  JSON.stringify({ calls: gateCalls.length - callsBeforeAck, items: (courierGate.items || []).map((item) => [item.mailId, item.state, item.retired]) }),
+)
+check(
+  '门控留痕（notice:gated / courier:filed 皆可）',
+  (ledGate.events || []).some((e) => e.mail_id === 'M-20261118-9101' && (e.note === 'notice:gated' || e.note === 'courier:filed')),
+  JSON.stringify((ledGate.events || []).filter((e) => e.mail_id === 'M-20261118-9101').map((e) => e.note)),
+)
+const todoMail = await gateBox.send(gateMail('L3', 'S63', 'S65', 'M-20261118-9103', 'S-TODO-NOTICE', { reason: '对方卡在发布验证，等你确认版本号', todoOf: 'M-20261118-9100', stuckSince: new Date(Date.now() - 120000).toISOString(), elapsedMinutes: 2 }))
+const todoPushed = await waitFor(() => gateCalls.some((call) => call.text.includes('M-20261118-9103')))
+check('阻塞信（S-TODO-NOTICE）照推', todoMail.status === 'pushed' && todoPushed, JSON.stringify({ push: todoMail.push || todoMail.error, calls: gateCalls.length }))
+const inb = await gateBox.inbox({ sessionId: 'S61' })
+check('mail_inbox 返回未读清单与时钟', inb.count === 2 && /^\d{2}:\d{2}$/.test(inb.clock) && inb.rows.every((row) => typeof row.ageMinutes === 'number'), JSON.stringify({ count: inb.count, clock: inb.clock, rows: inb.rows.map((r) => r.mailId) }))
+await gateBox.ack({ mailId: 'M-20261118-9100', close: true })
+const inb2 = await gateBox.inbox({ sessionId: 'S61' })
+check('mail_inbox 排除已结案', inb2.count === 1 && !inb2.rows.some((row) => row.mailId === 'M-20261118-9100'), JSON.stringify(inb2.rows.map((r) => r.mailId)))
+check('mail_inbox 每行带类型与来源', inb2.lines.length === 1 && /M-20261118-9101 · S-ACK · 来自 L1/.test(inb2.lines[0]), inb2.lines.join(' | '))
+
 await rm(tmp, { recursive: true, force: true })
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)

@@ -141,7 +141,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 <root>/heartbeat.json         心跳（heartbeat）      存活时间戳
 ```
 
-可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`；只读探针 `peer_state` 用来问某个会话现在忙不忙。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
+可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_inbox`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`；只读探针 `peer_state` 用来问某个会话现在忙不忙。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
 
 ### 模型工具，给 Agent
 
@@ -158,6 +158,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `mail_send` | 写信 |
 | `mail_ack` | 回执，带 close 表示结案 |
 | `mail_list` | 按 owner 列出信件 |
+| `mail_inbox` | 拉自己名下的未读（只读），带时钟、状态、时长、位置 |
 | `mail_status` | 看某一封走过的路径、所属群、是否逾期、通道积压 |
 | `mail_pause` | 暂停或恢复信使通道，查通道积压 |
 | `mail_group` | 建群、列群，或取本工作区候选会话 |
@@ -232,6 +233,8 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 目标一直在任务里不空闲，信就留在持有队列（`held`），信封头写 `paused: true`。等目标回到空闲，通道先报数（「你有 N 封没处理」），再一封一封递：上一封被消费了才递下一封。信封静置超过 `staleAfterMs`（默认 30 分钟）仍没人动，才允许补一次催收。
 
 要临时全停，用 `mail_pause`（`do: pause | resume | status`）。暂停状态落盘，重启保持。
+
+**默认不推**。对话是稀缺资源，一封普通信不值得把对方从别的事里拽出来，所以 `S-ACK` 这类纯回执、以及对方名下本来就有没消费的卡时，信只落盘、不投卡，留痕写 `notice:gated` / `courier:filed`。仍然会推的只有四种：`S-EXPIRE` 与显式加急、`S-TODO-NOTICE`、已经进过对方一轮还没结案的催收、以及对方名下当前没有任何在途信（首封——不叫醒就永远没人知道）。被挡下的信不会消失：`mail_inbox` 按 `sessionId` 列出未读（时钟、状态、多久前、信封路径），agent 开工前先拉一眼即可；一直没人拉，定时器照样把它打成待办，再走私聊催收。
 
 同一对人来回超过阈值（默认 3 封）会自动结群，有交集的两个群会合并成一个。建群只写 `group.json` 和留痕，不给双方投消息——路由变化不需要谁去响应；想确认关系，用 `mail_status` 看 `group` 字段。建会话时开的那条专用通道是另一回事，它带 `scope=task`，不参与合并，成员会话归档、TTL 到期、或者群内信件全部落定后静默十分钟，就退休并在留痕里记一笔。
 
