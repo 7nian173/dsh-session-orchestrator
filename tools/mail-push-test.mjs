@@ -337,6 +337,11 @@ check(
   (ledGate.events || []).some((e) => e.mail_id === 'M-20261118-9101' && (e.note === 'notice:gated' || e.note === 'courier:filed')),
   JSON.stringify((ledGate.events || []).filter((e) => e.mail_id === 'M-20261118-9101').map((e) => e.note)),
 )
+// S-ACK 不该挡后续信件的唤醒：它自己永远不叫醒谁，却能在门控里冒充“前面还有人等着”
+const ackToGate = await gateBox.send(gateMail('L4', 'S70', 'S71', 'M-20261118-9110', 'S-ACK', { ackOf: 'M-20261118-9100' }))
+const afterAck = await gateBox.send(gateMail('L5', 'S72', 'S71', 'M-20261118-9111'))
+check('静默 S-ACK 不挡后续唤醒', ackToGate.push && ackToGate.push.gated === true && afterAck.status === 'pushed', JSON.stringify({ ack: ackToGate.push, next: afterAck.push }))
+
 // 历史脏状态不许把唤醒永久堵死：实盘 Lead 会话里有 5 封 status=running 的旧信，门控被它们一直挡住
 const lettersFile = join(wsGate, '.dsh-mail', '_letters.json')
 const legacy = await readJson(lettersFile)
