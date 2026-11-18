@@ -145,6 +145,7 @@ check('加急条目带 urgent 标记', (expQueue.items || []).some((item) => ite
 check('文案带时间戳', (expCalls[0] ? /现在 \d{2}:\d{2}.*本信 \d{2}:\d{2}/.test(expCalls[0].text) : false), expCalls[0] ? expCalls[0].text.slice(0, 40) : '')
 busy2 = false
 
+
 // 已 ack 的信允许撤销，但要留 expiredAfterAck（否则事后分不清“没人理”与“确认过又被叫停”）
 const ackThen = await chBox.send(chMail('X', 'Y', 'S40', 'S41', 'M-20261118-9301'))
 await chBox.ack({ mailId: 'M-20261118-9301', close: false })
@@ -234,8 +235,10 @@ check('重启前：忙则只入队', queuedOnce.push.queued === false && restart
 await firstLife.pause({ do: 'pause', cwd: wsCh2 })
 busy3 = false
 const cjBefore = await readJson(join(wsCh2, '.dsh-mail', '_courier.json'))
-const queuedBefore = (cjBefore.items || []).filter((item) => item.state === 'queued' || item.state === 'held').length
-check('重启前：条目已落盘', queuedBefore >= 1, JSON.stringify(cjBefore.items.map((item) => item.state)))
+// 只断言“这封信在通道文件里有条目”：忙了 50ms 后会转 held，执行顺序不同会看到 queued 或 done+held，
+// 纠结具体状态就让测试跟调度器赛跑（CI 上抖过一次）。
+const persisted = (cjBefore.items || []).some((item) => item.mailId === 'M-20261117-8031')
+check('重启前：条目已落盘', persisted, JSON.stringify((cjBefore.items || []).map((item) => [item.mailId, item.state])))
 
 // 新进程 = 新实例，只读磁盘；先恢复通道，验证真的会续投
 const secondLife = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? mkRestartController() : undefined), log: () => {}, cwdOf: cwdCh2, cwds: async () => [wsCh2], courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 400, digestGapMs: 0 } })
@@ -381,11 +384,17 @@ const todoMail = await gateBox.send(gateMail('L3', 'S63', 'S65', 'M-20261118-910
 const todoPushed = await waitFor(() => gateCalls.some((call) => call.text.includes('M-20261118-9103')))
 check('阻塞信（S-TODO-NOTICE）照推', todoMail.status === 'pushed' && todoPushed, JSON.stringify({ push: todoMail.push || todoMail.error, calls: gateCalls.length }))
 const inb = await gateBox.inbox({ sessionId: 'S61' })
-check('mail_inbox 返回未读清单与时钟', inb.count === 2 && /^\d{2}:\d{2}$/.test(inb.clock) && inb.rows.every((row) => typeof row.ageMinutes === 'number'), JSON.stringify({ count: inb.count, clock: inb.clock, rows: inb.rows.map((r) => r.mailId) }))
+check('mail_inbox 返回未读清单与时钟', inb.count === 1 && /^\d{2}:\d{2}$/.test(inb.clock) && inb.rows.every((row) => typeof row.ageMinutes === 'number'), JSON.stringify({ count: inb.count, clock: inb.clock, rows: inb.rows.map((r) => r.mailId) }))
 await gateBox.ack({ mailId: 'M-20261118-9100', close: true })
 const inb2 = await gateBox.inbox({ sessionId: 'S61' })
-check('mail_inbox 排除已结案', inb2.count === 1 && !inb2.rows.some((row) => row.mailId === 'M-20261118-9100'), JSON.stringify(inb2.rows.map((r) => r.mailId)))
-check('mail_inbox 每行带类型与来源', inb2.lines.length === 1 && /M-20261118-9101 · S-ACK · 来自 L1/.test(inb2.lines[0]), inb2.lines.join(' | '))
+check('mail_inbox 排除已结案', inb2.count === 0, JSON.stringify(inb2.rows.map((r) => r.mailId)))
+check('mail_inbox 每行带类型与来源', inb.lines.length === 1 && /M-20261118-9100 · S-PROGRESS · 来自 L1/.test(inb.lines[0]), inb.lines.join(' | '))
+
+// 静默回执必须当场结清：不能占背压槽位、不能超时转待办、不能永远挂在未读里
+const ackProbe = await chBox.send(chMail('Z1', 'Z2', 'S80', 'S81', 'M-20261118-9501', 'S-ACK', { ackOf: 'M-20261117-8001' }))
+const afterAckProbe = await chBox.send(chMail('Z1', 'Z2', 'S80', 'S81', 'M-20261118-9502'))
+check('静默回执当场结清（acked + autoSettled）', ackProbe.ok === true && ackProbe.status === 'acked', JSON.stringify({ status: ackProbe.status, push: ackProbe.push }))
+check('静默回执不占背压槽位', afterAckProbe.ok === true && afterAckProbe.status === 'pushed', JSON.stringify(afterAckProbe.error || afterAckProbe.push))
 
 await rm(tmp, { recursive: true, force: true })
 // 真实会话的第一次收信：信箱必须当场建出来。不建的话 archive 与 courier 都以「未注册」静默跳过，
