@@ -114,7 +114,7 @@ It does not work for the desktop profile, which Electron manages exclusively and
 | `ackTimeoutMs` | `300000` | Receipt window. It starts at **delivery** (the card entered one of the target turns) and the letter becomes a to-do if no receipt arrives; undelivered letters count from sending |
 | `notifyToken` | `''` | Shared token for `/session-bridge/notify`, empty means no check |
 | `backTtlMs` | `1800000` | How long a jump keeps offering the back button |
-| `childNamePrefix` | `agent-` | Name prefix used when a new session registers automatically |
+| `childNamePrefix` | `''` | Optional extra prefix for auto-registered names; default is `<workspace folder>-<last 4 of sessionId>` |
 | `taskChannelTtlMs` | `86400000` | Lifetime of the dedicated channel between creator and child |
 | `taskChannelIdleMs` | `600000` | Idle time before a channel whose letters all settled is retired |
 | `dispatcher` | `true` | Run the queue dispatcher and same-origin routes. A tools-only instance mounted in an agent preset sets `false` and forwards tool calls to the running dispatcher over the file queue |
@@ -164,6 +164,8 @@ Eleven in total.
 | `mail_pause` | Pause or resume the courier channel, or report its backlog |
 
 **Names may be Chinese.** `session_register_name` accepts 1–32 characters including CJK, so names like `会话编排插件维护者` or `决策` work directly. A registered Chinese name resolves in `mail_send(peer:)` / `session_tell(name:)`, and shows up (and can be searched) in the `@` friend menu as `name · sessionId`. One primary name per session: re-registering replaces it; to keep an old name alive, add a second entry with the same `sessionId` in `$DSH_HOME/session-bridge/friends.json` — multiple names can point at one session.
+
+**Auto-registered names.** Sessions created through `session_init_workspace` / `session_handoff` default to `<workspace folder name>-<last 4 chars of sessionId>` (e.g. `本地-c91e`, `FatFish-Whisper-workspace-b2b6`). The workspace prefix is never dropped: several sessions may share the same last four, so the prefix is what separates workspaces. On a collision the suffix gains `-2` / `-3`.
 
 **An agent preset needs its own row.** A preset session only sees plugins its declaration lists; the root-mounted copy does not flow in. Add to the preset `plugins`:
 

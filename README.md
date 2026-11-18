@@ -114,7 +114,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `ackTimeoutMs` | `300000` | 回执窗口。从**送达**（进过对方某一轮）起算，超过仍无回执就转待办；没送达的信从发出起算 |
 | `notifyToken` | `''` | `/session-bridge/notify` 的共享令牌，留空表示不校验 |
 | `backTtlMs` | `1800000` | 一次跳转后，返回按钮保留多久 |
-| `childNamePrefix` | `agent-` | 建会话自动注册时的名字前缀 |
+| `childNamePrefix` | `''` | 自动注册名的额外前缀（可空）；默认名是 `<工作区目录名>-<会话ID后四位>` |
 | `taskChannelTtlMs` | `86400000` | 创建者与新会话之间专用通道的存活时长 |
 | `taskChannelIdleMs` | `600000` | 群内信件全部落定后静默多久回收该通道 |
 | `dispatcher` | `true` | 是否跑队列轮询与同源路由。预设里挂的工具实例要设 `false`，工具调用走文件队列交给正在跑的那个实例 |
@@ -249,6 +249,8 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 - `mail_send(peer: "会话编排插件维护者")`、`session_tell(name: "决策")` 都能直接寻址；
 - `@` 菜单会显示中文名（`注册名 · 会话 id`），也能按中文搜索；
 - 一个会话同时只有一个**主名**，重新注册会替换主名；如果想让旧名继续可用，可在 `$DSH_HOME/session-bridge/friends.json` 里为同一 `sessionId` 手工加一条记录（同名同会话的多条记录都可解析，旧英文名与中文名并存）。
+
+**自动注册名**。`session_init_workspace` / `session_handoff` 等自动建会话时，注册名默认是 **`<工作区目录名>-<会话 ID 后四位>`**，例如 `本地-c91e`、`FatFish-Whisper-workspace-b2b6`。工作区前缀不能省：同一工作区里多个会话可能只差后四位，跨工作区必须先看前缀。后四位撞车时自动补 `-2` / `-3`。
 
 **默认不推**。对话是稀缺资源，一封普通信不值得把对方从别的事里拽出来，所以 `S-ACK` 这类纯回执、以及对方名下本来就有没消费的卡时，信只落盘、不投卡，留痕写 `notice:gated` / `courier:filed`。仍然会推的只有四种：`S-EXPIRE` 与显式加急、`S-TODO-NOTICE`、已经进过对方一轮还没结案的催收、以及对方名下当前没有任何在途信（首封——不叫醒就永远没人知道）。被挡下的信不会消失：`mail_inbox` 按 `sessionId` 列出未读（时钟、状态、多久前、信封路径），agent 开工前先拉一眼即可；一直没人拉，定时器照样把它打成待办，再走私聊催收。
 
