@@ -291,7 +291,7 @@ check('三人新群', multi.ok === true && multi.changed === true && multi.group
 const mergeRes = await gb.groupCreate({ members: ['A1', 'F1'], cwd: wsTo })
 check('跨群并合（两个群并成一个）', mergeRes.ok === true && mergeRes.merged === true && mergeRes.group.members.length === 6, JSON.stringify(mergeRes.group?.members))
 const after = await gb.groupList({ cwd: wsTo })
-check('并完只剩两组（无关群保留）', after.count === 2 && after.groups.some((g) => g.members.length === 6), JSON.stringify(after.groups?.map((g) => g.members.length)))
+check('并完只剩两组（无关群保留）', after.count === 2 && after.groups.some((g) => g.members.length === 6), JSON.stringify(after.groups?.map((g) => [g.id, g.members.length, g.members.join('/')])))
 
 // ── 任务专用通道：一对一、带 TTL、不参与并群、可被普通群提升、到期回收
 const ch = await gb.createTaskChannel({ ownerSessionId: 'O1', memberSessionId: 'M1', memberCwd: wsTo, ttlMs: 600000 })
