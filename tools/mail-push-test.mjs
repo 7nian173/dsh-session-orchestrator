@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createMailbox, ensureWorkspaceBox } from '../lib/mail.js'
 
 const tmp = join(process.cwd(), '_tmp', 'mail-ws-test')
+
 await rm(tmp, { recursive: true, force: true })
 const wsFrom = join(tmp, 'ws-from')
 const wsTo = join(tmp, 'ws-to')
@@ -366,5 +367,18 @@ check('mail_inbox 排除已结案', inb2.count === 1 && !inb2.rows.some((row) =>
 check('mail_inbox 每行带类型与来源', inb2.lines.length === 1 && /M-20261118-9101 · S-ACK · 来自 L1/.test(inb2.lines[0]), inb2.lines.join(' | '))
 
 await rm(tmp, { recursive: true, force: true })
+// 真实会话的第一次收信：信箱必须当场建出来。不建的话 archive 与 courier 都以「未注册」静默跳过，
+// 结果信只在内存里、盘上没有信封（实盘 M-20261118-0008 就这么丢过一次）。
+const wsFresh = join(tmp, 'ws-fresh')
+await mkdir(wsFresh, { recursive: true })
+const freshCalls = []
+const freshController = { async prompt(req) { freshCalls.push(req.sessionId); return { ok: true } } }
+const freshBox = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? freshController : undefined), log: () => {}, cwdOf: async () => wsFresh, courier: { intervalMs: 0 } })
+const freshSend = await freshBox.send({ owner: 'L', peer: 'R', type: 'S-PROGRESS', body: 'x', senderSessionId: 'SF1', peerSessionId: 'SF2', mailId: 'M-20261118-9201' })
+const freshEnvelope = await readdir(join(wsFresh, '.dsh-mail', 'envelope')).catch(() => [])
+check('新会话首次收信即建箱并落信封', freshSend.ok === true && freshEnvelope.includes('M-20261118-9201.to.md'), JSON.stringify(freshEnvelope))
+const freshCourier = await readJson(join(wsFresh, '.dsh-mail', '_courier.json')).catch(() => null)
+check('新箱的通道文件同时写出', freshCourier !== null && typeof freshCourier.seq === 'number', JSON.stringify(freshCourier && Object.keys(freshCourier)))
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
