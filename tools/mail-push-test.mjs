@@ -4,6 +4,7 @@ import { createMailbox, ensureWorkspaceBox } from '../lib/mail.js'
 
 const tmp = join(process.cwd(), '_tmp', 'mail-ws-test')
 
+
 await rm(tmp, { recursive: true, force: true })
 const wsFrom = join(tmp, 'ws-from')
 const wsTo = join(tmp, 'ws-to')
@@ -154,18 +155,18 @@ const ledAfterAck = await readJson(join(wsCh, '.dsh-mail', '_letters.json'))
 const recAfterAck = (ledAfterAck.letters || []).find((l) => l.id === 'M-20261118-9301') || {}
 check('已 acked 仍可撤销且记 expiredAfterAck', ackThen.ok === true && expAfterAck.ok === true && recAfterAck.status === 'expired' && recAfterAck.expiredAfterAck === true, JSON.stringify({ status: recAfterAck.status, after: recAfterAck.expiredAfterAck, ackedAt: Boolean(recAfterAck.ackedAt) }))
 
-// 送达不是终点：回执窗口从「对方看到」重新起算，delivered 的信仍要能转待办
+// 送达即回执：信进了对方一轮就自动 ack，不再等手工回执、也不会超时转待办
 const boxT = createMailbox({ ackTimeoutMs: 300, service: (k) => (k === 'sessionController' ? chController : undefined), log: () => {}, cwdOf: cwdCh, courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 3000, digestGapMs: 0 } })
 await boxT.send(chMail('T', 'U', 'S12', 'S13', 'M-20261117-8301'))
 await boxT.noteStep({ id: 'S13' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261117-8301〕' }] }])
 await sleep(60)
 const midT = await boxT.status({ mailId: 'M-20261117-8301' })
-check('送达后先停在 delivered', midT.rows[0] && midT.rows[0].status === 'delivered', String(midT.rows[0] && midT.rows[0].status))
+check('送达即自动 ack（status=acked）', midT.rows[0] && midT.rows[0].status === 'acked', String(midT.rows[0] && midT.rows[0].status))
 await sleep(1300)
 const afterT = await boxT.status({ mailId: 'M-20261117-8301' })
-check('送达后仍会超时转待办', afterT.rows[0] && afterT.rows[0].status === 'blocked', String(afterT.rows[0] && afterT.rows[0].status))
+check('自动 ack 后不会再转待办', afterT.rows[0] && afterT.rows[0].status === 'acked', String(afterT.rows[0] && afterT.rows[0].status))
 const timerLetter = JSON.parse(await readFile(join(wsCh, '.dsh-mail', '_letters.json'), 'utf8')).letters.find((l) => l.id === 'M-20261117-8301')
-check('转待办留痕 todo_since', Boolean(timerLetter && timerLetter.todoSince), JSON.stringify(timerLetter && timerLetter.todoSince))
+check('自动回执留痕 autoAcked', Boolean(timerLetter && timerLetter.autoAcked === true), JSON.stringify(timerLetter && timerLetter.autoAcked))
 
 busy2 = true
 const chHeld1 = await chBox.send(chMail('C', 'D', 'S3', 'S4', 'M-20261117-8011'))
@@ -383,12 +384,14 @@ check('历史 running 状态不挡唤醒', legacyProbe.status === 'pushed', JSON
 const todoMail = await gateBox.send(gateMail('L3', 'S63', 'S65', 'M-20261118-9103', 'S-TODO-NOTICE', { reason: '对方卡在发布验证，等你确认版本号', todoOf: 'M-20261118-9100', stuckSince: new Date(Date.now() - 120000).toISOString(), elapsedMinutes: 2 }))
 const todoPushed = await waitFor(() => gateCalls.some((call) => call.text.includes('M-20261118-9103')))
 check('阻塞信（S-TODO-NOTICE）照推', todoMail.status === 'pushed' && todoPushed, JSON.stringify({ push: todoMail.push || todoMail.error, calls: gateCalls.length }))
+// 9100 在 noteStep 时已经自动 ack，所以另发一封留在未读里
+const inboxMail = await gateBox.send(gateMail('L6', 'S70', 'S61', 'M-20261118-9106'))
 const inb = await gateBox.inbox({ sessionId: 'S61' })
-check('mail_inbox 返回未读清单与时钟', inb.count === 1 && /^\d{2}:\d{2}$/.test(inb.clock) && inb.rows.every((row) => typeof row.ageMinutes === 'number'), JSON.stringify({ count: inb.count, clock: inb.clock, rows: inb.rows.map((r) => r.mailId) }))
-await gateBox.ack({ mailId: 'M-20261118-9100', close: true })
+check('mail_inbox 返回未读清单与时钟', inboxMail.ok === true && inb.count === 1 && /^\d{2}:\d{2}$/.test(inb.clock) && inb.rows.every((row) => typeof row.ageMinutes === 'number'), JSON.stringify({ count: inb.count, clock: inb.clock, rows: inb.rows.map((r) => r.mailId) }))
+check('mail_inbox 每行带类型与来源', inb.lines.length === 1 && /M-20261118-9106 · S-PROGRESS · 来自 L6/.test(inb.lines[0]), inb.lines.join(' | '))
+await gateBox.ack({ mailId: 'M-20261118-9106', close: true })
 const inb2 = await gateBox.inbox({ sessionId: 'S61' })
 check('mail_inbox 排除已结案', inb2.count === 0, JSON.stringify(inb2.rows.map((r) => r.mailId)))
-check('mail_inbox 每行带类型与来源', inb.lines.length === 1 && /M-20261118-9100 · S-PROGRESS · 来自 L1/.test(inb.lines[0]), inb.lines.join(' | '))
 
 // 静默回执必须当场结清：不能占背压槽位、不能超时转待办、不能永远挂在未读里
 const ackProbe = await chBox.send(chMail('Z1', 'Z2', 'S80', 'S81', 'M-20261118-9501', 'S-ACK', { ackOf: 'M-20261117-8001' }))
@@ -409,6 +412,14 @@ const freshEnvelope = await readdir(join(wsFresh, '.dsh-mail', 'envelope')).catc
 check('新会话首次收信即建箱并落信封', freshSend.ok === true && freshEnvelope.includes('M-20261118-9201.to.md'), JSON.stringify(freshEnvelope))
 const freshCourier = await readJson(join(wsFresh, '.dsh-mail', '_courier.json')).catch(() => null)
 check('新箱的通道文件同时写出', freshCourier !== null && typeof freshCourier.seq === 'number', JSON.stringify(freshCourier && Object.keys(freshCourier)))
+
+// 开工横幅：有未读才出现，且指向 mail_inbox；没有未读就安静
+const bannerMail = await gateBox.send(gateMail('L7', 'S71', 'S61', 'M-20261118-9107'))
+const banner = await gateBox.stepBanner({ id: 'S61' })
+check('stepBanner 有未读时给一行', Boolean(bannerMail.ok) && typeof banner === 'string' && /信箱·开工检查/.test(banner) && /mail_inbox/.test(banner), String(banner))
+const bannerEmpty = await gateBox.stepBanner({ id: 'S99' })
+check('stepBanner 无未读时安静', bannerEmpty === null, String(bannerEmpty))
+await gateBox.ack({ mailId: 'M-20261118-9107', close: true })
 
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
