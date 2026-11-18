@@ -133,6 +133,14 @@ check('加急件绕过忙状态投出去', expCalls.length >= 1, JSON.stringify(
 const dupExp = await chBox.send(chMail('W', 'V', 'S30', 'S31', 'M-20261118-9003', 'S-EXPIRE', { expireOf: 'M-20261118-9001', reason: '重复撤销' }))
 check('同一件事只发一件撤销', dupExp.duplicate === true && dupExp.mailId === 'M-20261118-9002', JSON.stringify(dupExp))
 const expQueue = JSON.parse(await readFile(join(wsCh, '.dsh-mail', '_courier.json'), 'utf8'))
+// 暂停优先于加急：通道 paused 时连撤销也只入队（人工急停不该被系统绕过）
+const pausedUrgentBase = await chSoft.send(chMail('V2', 'W2', 'S50', 'S51', 'M-20261118-9401'))
+await chSoft.pause({ do: 'pause', cwd: wsCh })
+const urgentPaused = await chSoft.send(chMail('W2', 'V2', 'S51', 'S50', 'M-20261118-9402', 'S-EXPIRE', { expireOf: 'M-20261118-9401', reason: '验收：暂停优先于加急' }))
+check('通道暂停时撤销也只入队', urgentPaused.ok === true && urgentPaused.status !== 'pushed' && urgentPaused.push && urgentPaused.push.deferred === true, JSON.stringify(urgentPaused.push))
+await chSoft.pause({ do: 'resume', cwd: wsCh })
+void pausedUrgentBase
+
 check('加急条目带 urgent 标记', (expQueue.items || []).some((item) => item.mailId === 'M-20261118-9002' && item.urgent === true), JSON.stringify((expQueue.items || []).map((i) => [i.mailId, i.urgent])))
 check('文案带时间戳', (expCalls[0] ? /现在 \d{2}:\d{2}.*本信 \d{2}:\d{2}/.test(expCalls[0].text) : false), expCalls[0] ? expCalls[0].text.slice(0, 40) : '')
 busy2 = false
