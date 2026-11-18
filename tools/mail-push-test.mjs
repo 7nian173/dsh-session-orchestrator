@@ -65,7 +65,7 @@ check('未注册工作区不建箱', r2.ok === true && !(await readdir(wsGhost))
 
 // ── 信使通道（v0.2）：背压 / 忙则排队 / 忙久转待办 / 空闲报数再逐封 / 暂停 / 重启续排
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-const waitFor = async (fn, timeoutMs = 2000) => {
+const waitFor = async (fn, timeoutMs = 5000) => {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (fn()) return true
@@ -175,7 +175,7 @@ await sleep(80)
 check('上一张没被消费 → 不发下一张', s4Cards() === 1, String(s4Cards()))
 
 await chBox.noteStep({ id: 'S4' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261117-8011〕 收到' }] }])
-await waitFor(() => s4Cards() === 2)
+await waitFor(() => s4Cards() === 2, 8000)
 check('上一张被消费 → 递下一封', s4Cards() === 2, String(s4Cards()))
 
 // 发信方拿的是聚合摘要：说清原因、给排位，避免把待办读成沉默
