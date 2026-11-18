@@ -126,6 +126,7 @@ check('撤销信放行（背压豁免）', exp.ok === true && exp.status !== 'bl
 await sleep(80)
 const origNow = await chBox.status({ mailId: 'M-20261118-9001' })
 check('原信转 expired（E）', origNow.rows[0] && origNow.rows[0].status === 'expired', JSON.stringify(origNow.rows[0] && origNow.rows[0].toPath))
+check('过期信落到「已过期」目录而不是「已解决」', origNow.rows[0] && origNow.rows[0].toDir === '已过期' && origNow.rows[0].fromDir === '已过期', JSON.stringify({ to: origNow.rows[0] && origNow.rows[0].toDir, from: origNow.rows[0] && origNow.rows[0].fromDir }))
 const expCalls = chCalls.slice(expireCalls).filter((call) => /〔信箱·/.test(call.text))
 check('加急件绕过忙状态投出去', expCalls.length >= 1, JSON.stringify(expCalls.map((c) => c.text.slice(0, 18))))
 const dupExp = await chBox.send(chMail('W', 'V', 'S30', 'S31', 'M-20261118-9003', 'S-EXPIRE', { expireOf: 'M-20261118-9001', reason: '重复撤销' }))
@@ -335,6 +336,25 @@ check(
   (ledGate.events || []).some((e) => e.mail_id === 'M-20261118-9101' && (e.note === 'notice:gated' || e.note === 'courier:filed')),
   JSON.stringify((ledGate.events || []).filter((e) => e.mail_id === 'M-20261118-9101').map((e) => e.note)),
 )
+// 历史脏状态不许把唤醒永久堵死：实盘 Lead 会话里有 5 封 status=running 的旧信，门控被它们一直挡住
+const lettersFile = join(wsGate, '.dsh-mail', '_letters.json')
+const legacy = await readJson(lettersFile)
+legacy.letters.push({
+  id: 'M-20261118-9199',
+  type: 'S-PROGRESS',
+  from: 'L9',
+  to: 'R',
+  fromSession: 'S68',
+  toSession: 'S69',
+  status: 'running',
+  sentAt: new Date(Date.now() - 3600000).toISOString(),
+  _cwd: wsGate,
+})
+await writeFile(lettersFile, JSON.stringify(legacy, null, 2), 'utf8')
+const gateLegacy = createMailbox({ ackTimeoutMs: 600000, service: (k) => (k === 'sessionController' ? gateController : undefined), log: () => {}, cwdOf: async () => wsGate, courier: { intervalMs: 0 } })
+const legacyProbe = await gateLegacy.send(gateMail('L9', 'S68', 'S69', 'M-20261118-9198'))
+check('历史 running 状态不挡唤醒', legacyProbe.status === 'pushed', JSON.stringify(legacyProbe.push || legacyProbe.error))
+
 const todoMail = await gateBox.send(gateMail('L3', 'S63', 'S65', 'M-20261118-9103', 'S-TODO-NOTICE', { reason: '对方卡在发布验证，等你确认版本号', todoOf: 'M-20261118-9100', stuckSince: new Date(Date.now() - 120000).toISOString(), elapsedMinutes: 2 }))
 const todoPushed = await waitFor(() => gateCalls.some((call) => call.text.includes('M-20261118-9103')))
 check('阻塞信（S-TODO-NOTICE）照推', todoMail.status === 'pushed' && todoPushed, JSON.stringify({ push: todoMail.push || todoMail.error, calls: gateCalls.length }))
