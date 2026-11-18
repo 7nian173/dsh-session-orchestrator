@@ -157,9 +157,13 @@ Eleven in total.
 | `session_tell` | Send a short direct message to a registered name |
 | `mail_send` | Write a letter |
 | `mail_ack` | Acknowledge a letter; `close` settles it |
+| `mail_inbox` | Pull your unread letters (read-only), with clock, status, age and envelope path |
+| `mail_friends` | List registered friends (name + session id only, no cwd/workspace) |
 | `mail_list` | List letters by owner |
 | `mail_status` | Path taken, owning group, overdue flag, channel backlog for one letter |
 | `mail_pause` | Pause or resume the courier channel, or report its backlog |
+
+**Names may be Chinese.** `session_register_name` accepts 1–32 characters including CJK, so names like `会话编排插件维护者` or `决策` work directly. A registered Chinese name resolves in `mail_send(peer:)` / `session_tell(name:)`, and shows up (and can be searched) in the `@` friend menu as `name · sessionId`. One primary name per session: re-registering replaces it; to keep an old name alive, add a second entry with the same `sessionId` in `$DSH_HOME/session-bridge/friends.json` — multiple names can point at one session.
 
 **An agent preset needs its own row.** A preset session only sees plugins its declaration lists; the root-mounted copy does not flow in. Add to the preset `plugins`:
 
