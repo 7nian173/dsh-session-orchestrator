@@ -137,6 +137,14 @@ check('加急条目带 urgent 标记', (expQueue.items || []).some((item) => ite
 check('文案带时间戳', (expCalls[0] ? /现在 \d{2}:\d{2}.*本信 \d{2}:\d{2}/.test(expCalls[0].text) : false), expCalls[0] ? expCalls[0].text.slice(0, 40) : '')
 busy2 = false
 
+// 已 ack 的信允许撤销，但要留 expiredAfterAck（否则事后分不清“没人理”与“确认过又被叫停”）
+const ackThen = await chBox.send(chMail('X', 'Y', 'S40', 'S41', 'M-20261118-9301'))
+await chBox.ack({ mailId: 'M-20261118-9301', close: false })
+const expAfterAck = await chBox.send(chMail('Y', 'X', 'S41', 'S40', 'M-20261118-9302', 'S-EXPIRE', { expireOf: 'M-20261118-9301', reason: '验收：已 acked 仍可撤销' }))
+const ledAfterAck = await readJson(join(wsCh, '.dsh-mail', '_letters.json'))
+const recAfterAck = (ledAfterAck.letters || []).find((l) => l.id === 'M-20261118-9301') || {}
+check('已 acked 仍可撤销且记 expiredAfterAck', ackThen.ok === true && expAfterAck.ok === true && recAfterAck.status === 'expired' && recAfterAck.expiredAfterAck === true, JSON.stringify({ status: recAfterAck.status, after: recAfterAck.expiredAfterAck, ackedAt: Boolean(recAfterAck.ackedAt) }))
+
 // 送达不是终点：回执窗口从「对方看到」重新起算，delivered 的信仍要能转待办
 const boxT = createMailbox({ ackTimeoutMs: 300, service: (k) => (k === 'sessionController' ? chController : undefined), log: () => {}, cwdOf: cwdCh, courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 3000, digestGapMs: 0 } })
 await boxT.send(chMail('T', 'U', 'S12', 'S13', 'M-20261117-8301'))

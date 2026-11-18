@@ -219,6 +219,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | 同一对未结案 | 最多 1 封 | 上一封没回执就不许再发；`S-ACK`、`S-TODO-NOTICE`、`S-EXPIRE` 豁免 |
 | 加急 | 队首 | `S-EXPIRE` / 显式 `urgent` 优先取件，且绕过“对方忙”与“上一张没消费”两道闸门 |
 | 撤销对事 | 一事一件 | 同一封原信只允许一件在投的 `S-EXPIRE`，重复发返回已有那件 |
+| 撤销穿透 acked | 允许 | `acked` 只表示对方确认收到、开始处理，不代表结果被接受；撤销后保留 `ackedAt` 并记 `expiredAfterAck: true`，台账能看出「先接收、再叫停」。`done`（已结案）仍然拒绝撤销 |
 | 软释放 | 10 分钟 | 兜底，只覆盖「信停在 delivered 没转待办」的病态路径（定时器丢失之类）；正常路径 5 分钟就转待办、背压随之解除，轮不到它。留痕 `backpressure:soft-release`；`0` 关掉 |
 | 单封催收 | 最多 2 次 | 首次一次，看门狗补一次 |
 
