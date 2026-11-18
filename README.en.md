@@ -196,6 +196,7 @@ State, directory, and letter map to each other in a fixed way.
 | `R` | 处理中 (in progress) | The other side started working on it |
 | `B` | 待办 (to-do) | Could not be delivered, or nobody answered in time |
 | `D` | 已解决 (done) | Settled |
+| `E` | 已过期 (expired) | Cancelled by `S-EXPIRE`; nothing left to do (terminal) |
 
 Paths only append. The sender typically walks `A>R>D` and the receiver `P>R>D`; a stall in the middle shows up as a branch such as `A>B`.
 
@@ -214,7 +215,9 @@ Three rules.
 | Rule | Value | Why |
 |---|---|---|
 | In flight per session | at most 1 unconsumed card | the target runs one turn at a time; extra cards only take up queue space |
-| Open letters per pair | at most 1 | no receipt, no new letter; `S-ACK` and `S-TODO-NOTICE` are exempt |
+| Open letters per pair | at most 1 | no receipt, no new letter; `S-ACK`, `S-TODO-NOTICE` and `S-EXPIRE` are exempt |
+| Urgent | head of queue | `S-EXPIRE` or an explicit `urgent` is taken first and skips the “peer busy” and “previous card unconsumed” gates |
+| Cancel per matter | one item | at most one in-flight `S-EXPIRE` per original letter; a repeat returns the existing one |
 | Soft release | 10 minutes | a safety net for the pathological case where a letter sits at `delivered` and never turns to-do (lost timer); the normal path turns it to-do at 5 minutes and releases the pair anyway. Trailed as `backpressure:soft-release`; `0` disables it |
 | Nudges per letter | at most 2 | one initial, one from the stale watchdog |
 

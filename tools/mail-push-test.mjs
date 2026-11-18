@@ -85,7 +85,7 @@ const chController = {
   },
   async state(request) {
     const id = request && request.sessionId
-    const busy = busy2 && id === 'S4'
+    const busy = busy2 && (id === 'S4' || id === 'S30')
     return { running: busy, active: busy }
   },
 }
@@ -114,6 +114,26 @@ const softPassed = await chSoft.send(chMail('P', 'Q', 'S8', 'S9', 'M-20261117-81
 check('过阈值 → 软释放放行', softPassed.ok === true && softPassed.released && softPassed.released.mailId === 'M-20261117-8101', JSON.stringify(softPassed.released))
 const softLedger = await readJson(join(wsCh, '.dsh-mail', '_ledger.json'))
 check('软释放留痕', (softLedger.events || []).some((e) => e.note === 'backpressure:soft-release' && e.mail_id === 'M-20261117-8101'), '')
+
+// ── 加急撤销（S-EXPIRE）：对事不对人、绕过忙与在途 ──
+const orig = await chBox.send(chMail('V', 'W', 'S31', 'S30', 'M-20261118-9001'))
+check('原信先投出', orig.ok === true, JSON.stringify(orig.error && orig.error.code))
+await chBox.noteStep({ id: 'S30' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261118-9001〕' }] }])
+busy2 = true
+const expireCalls = chCalls.length
+const exp = await chBox.send(chMail('W', 'V', 'S31', 'S30', 'M-20261118-9002', 'S-EXPIRE', { expireOf: 'M-20261118-9001', reason: '任务已完成，无需处理' }))
+check('撤销信放行（背压豁免）', exp.ok === true && exp.status !== 'blocked', JSON.stringify(exp.error && exp.error.code))
+await sleep(80)
+const origNow = await chBox.status({ mailId: 'M-20261118-9001' })
+check('原信转 expired（E）', origNow.rows[0] && origNow.rows[0].status === 'expired', JSON.stringify(origNow.rows[0] && origNow.rows[0].toPath))
+const expCalls = chCalls.slice(expireCalls).filter((call) => /〔信箱·/.test(call.text))
+check('加急件绕过忙状态投出去', expCalls.length >= 1, JSON.stringify(expCalls.map((c) => c.text.slice(0, 18))))
+const dupExp = await chBox.send(chMail('W', 'V', 'S30', 'S31', 'M-20261118-9003', 'S-EXPIRE', { expireOf: 'M-20261118-9001', reason: '重复撤销' }))
+check('同一件事只发一件撤销', dupExp.duplicate === true && dupExp.mailId === 'M-20261118-9002', JSON.stringify(dupExp))
+const expQueue = JSON.parse(await readFile(join(wsCh, '.dsh-mail', '_courier.json'), 'utf8'))
+check('加急条目带 urgent 标记', (expQueue.items || []).some((item) => item.mailId === 'M-20261118-9002' && item.urgent === true), JSON.stringify((expQueue.items || []).map((i) => [i.mailId, i.urgent])))
+check('文案带时间戳', (expCalls[0] ? /现在 \d{2}:\d{2}.*本信 \d{2}:\d{2}/.test(expCalls[0].text) : false), expCalls[0] ? expCalls[0].text.slice(0, 40) : '')
+busy2 = false
 
 // 送达不是终点：回执窗口从「对方看到」重新起算，delivered 的信仍要能转待办
 const boxT = createMailbox({ ackTimeoutMs: 300, service: (k) => (k === 'sessionController' ? chController : undefined), log: () => {}, cwdOf: cwdCh, courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 3000, digestGapMs: 0 } })
