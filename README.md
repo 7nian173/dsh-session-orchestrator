@@ -141,7 +141,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 <root>/heartbeat.json         心跳（heartbeat）      存活时间戳
 ```
 
-可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_inbox`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`；只读探针 `peer_state` 用来问某个会话现在忙不忙。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
+可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_inbox`、`mail_friends`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`；只读探针 `peer_state` 用来问某个会话现在忙不忙。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
 
 ### 模型工具，给 Agent
 
@@ -159,6 +159,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `mail_ack` | 回执，带 close 表示结案 |
 | `mail_list` | 按 owner 列出信件 |
 | `mail_inbox` | 拉自己名下的未读（只读），带时钟、状态、时长、位置 |
+| `mail_friends` | 列出注册好友（只给注册名 + 会话 id，不含 cwd/工作区） |
 | `mail_status` | 看某一封走过的路径、所属群、是否逾期、通道积压 |
 | `mail_pause` | 暂停或恢复信使通道，查通道积压 |
 | `mail_group` | 建群、列群，或取本工作区候选会话 |
@@ -240,6 +241,8 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 **送达即回执**。信一旦进了对方某一轮（`agent/pre-step` 看到〔信箱·…〕标记），插件就自动 `mail_ack`（`autoAcked: true`，状态 `acked`/处理中）。「读了先 ack」不需要角色卡纪律——插件自己记账，别让人拿记性补程序的窟窿。只有**从没进过任何一轮**的信才会超时转待办。
 
 **开工横幅**。每回合第一步，如果这个会话有未读，插件会往系统上下文里加一行（`source: runtime-context`，不是人类发言）：现在几点、几封未读、最早多久前、先用 `mail_inbox`。它不唤醒会话——只在已经有轮次的时候出现，补足「默认不推」的盲区。
+
+**`@` 好友菜单**。在输入框敲 `@`，除了 DSH 内置的「引用（文件/历史会话）」，还会多出一个「好友」分类：每条显示**注册名 · 会话 id**。选中后插入 DSH 原生的会话引用（`@[名字](dsh-session:…)`），不是一段死文本。好友表来自 `/session-bridge/friends`，只返回注册名与会话 id，不带 cwd、工作区或在线状态。
 
 **默认不推**。对话是稀缺资源，一封普通信不值得把对方从别的事里拽出来，所以 `S-ACK` 这类纯回执、以及对方名下本来就有没消费的卡时，信只落盘、不投卡，留痕写 `notice:gated` / `courier:filed`。仍然会推的只有四种：`S-EXPIRE` 与显式加急、`S-TODO-NOTICE`、已经进过对方一轮还没结案的催收、以及对方名下当前没有任何在途信（首封——不叫醒就永远没人知道）。被挡下的信不会消失：`mail_inbox` 按 `sessionId` 列出未读（时钟、状态、多久前、信封路径），agent 开工前先拉一眼即可；一直没人拉，定时器照样把它打成待办，再走私聊催收。
 
