@@ -1,8 +1,9 @@
 import { mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createMailbox, ensureWorkspaceBox } from '../lib/mail.js'
+import { createMailbox, ensureWorkspaceBox, isSafeMailId } from '../lib/mail.js'
 
 const tmp = join(process.cwd(), '_tmp', 'mail-ws-test')
+
 
 
 await rm(tmp, { recursive: true, force: true })
@@ -420,6 +421,19 @@ check('stepBanner 有未读时给一行', Boolean(bannerMail.ok) && typeof banne
 const bannerEmpty = await gateBox.stepBanner({ id: 'S99' })
 check('stepBanner 无未读时安静', bannerEmpty === null, String(bannerEmpty))
 await gateBox.ack({ mailId: 'M-20261118-9107', close: true })
+
+// 安全闸：mail_id 会被直接拼进信封文件名，穿越必须拒
+const guardBox = createMailbox({ ackTimeoutMs: 600000, service: () => undefined, log: () => {}, cwdOf: async () => wsGate })
+const evilIds = ['M-../../ESCAPED', '../../../ESCAPED', 'C:/ESCAPED', '.hidden', 'a/b']
+const evilResults = []
+for (const evil of evilIds) {
+  const r = await guardBox.send({ owner: 'a', peer: 'b', type: 'S-PROGRESS', body: 'x', senderSessionId: 'S90', peerSessionId: 'S91', mailId: evil })
+  evilResults.push([evil, r.ok, r.error && r.error.code])
+}
+check('mail_id 穿越一律拒收', evilResults.every(([, ok, code]) => ok === false && code === 'MAIL_INVALID'), JSON.stringify(evilResults))
+check('isSafeMailId 边界正确', isSafeMailId('M-20261119-0001') === true && isSafeMailId('../x') === false && isSafeMailId('.x') === false && isSafeMailId('a/b') === false, '')
+const okId = await guardBox.send({ owner: 'a', peer: 'b', type: 'S-PROGRESS', body: 'x', senderSessionId: 'S90', peerSessionId: 'S91', mailId: 'M-20261119-9999' })
+check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-20261119-9999', JSON.stringify(okId.error))
 
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)

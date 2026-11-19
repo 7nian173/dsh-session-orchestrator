@@ -143,6 +143,17 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_inbox`、`mail_friends`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`；只读探针 `peer_state` 用来问某个会话现在忙不忙。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
 
+### 危险动作的二次确认
+
+`delete_workspace` 带 `removeDir: true` 时**不会直接删目录**，走两段式：
+
+1. 第一请求不带 `confirm` → 返回 `ok:false, needsConfirm:true`、`confirmToken`、`path`、`sessions`，以及一句明确的警告（会删什么、有几个会话会变成未分组）；
+2. 十分钟内带 `confirmToken` + `confirm: "确认删除"` 重发 → 才真正 `rm -rf`。
+
+另外三个常量级的护栏：拒绝盘符根/层级过浅、拒绝用户主目录、拒绝系统目录与应用安装目录；每次删除都写 `deleted-workspaces.jsonl` 留痕。
+
+`init_workspace` 只允许在 `DSH_HOME` 或用户主目录之下建目录；`probe_workspace_stream` 的探针目录固定在队列根内，忽略外部传入的 `probeDir`。
+
 ### 浏览器 HTTP 路由
 
 所有 `/session-bridge/*` HTTP 路由在进入 handler 前，都会先调用 DSH 的 `connection.requestRejection(req)`：
