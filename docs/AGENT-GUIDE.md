@@ -196,7 +196,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 ### `done` 不可撤销，`acked` 可以
 
-- `acked` 表示**对方明确回过执**（不是插件自动标记的已读）。三段用 `deliveredAt` / `readAt` / `ackedAt` 区分；撤销已 acked 的信会记 `expiredAfterAck: true`。
+- `acked` 表示**对方明确回过执**。三段用 `deliveredAt`（送达）/ `readAt`（读过）/ `ackedAt`（表态）区分，`mail_status` 的 `readState` 直接告诉你走到哪一步。撤销已 acked 的信会记 `expiredAfterAck: true`。
 - `done` 是已结案，撤销请求会被拒。
 
 ---
@@ -238,7 +238,7 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
                      └─超时没人读──> blocked（待办）──补 ack──> acked
 ```
 
-- **送达即自动回执**：信只要进了对方某一轮，插件自动 `mail_ack`（记 `autoAcked: true`）。你不用操心「对方读没读」。
+- **送达不等于回执**：信进了对方某一轮只记 `deliveredAt` + `readAt`，**不再自动 ack**。对方明确回过才算 `acked`。所以「他读了吗」看 `readAt`，「他表态了吗」看 `ackedAt`——两件事分开。
 - **只有从没进过任何一轮的信**才会超时转待办。
 - `blocked` **不是终点**：补一次 ack 会走 `P>B>R>D`。
 

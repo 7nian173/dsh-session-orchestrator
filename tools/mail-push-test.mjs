@@ -1,6 +1,6 @@
 import { mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createMailbox, ensureWorkspaceBox, isSafeMailId } from '../lib/mail.js'
+import { createMailbox, ensureWorkspaceBox, isSafeMailId, receiptOf } from '../lib/mail.js'
 
 const tmp = join(process.cwd(), '_tmp', 'mail-ws-test')
 
@@ -64,14 +64,14 @@ check('留痕有事件', (led.events || []).length >= 1, JSON.stringify((led.eve
 // 送达（pre-step 观测到回执标记）→ 路径要出现 R
 await box.noteStep({ id: 'session-to' }, [{ content: [{ type: 'text', text: '〔信箱·' + id + '〕收到了' }] }])
 const idxDel = await readJson(join(wsTo, '.dsh-mail', '_index.json'))
-check('送达后收信方路径 P>R', idxDel[id]?.sides?.to?.path === 'P>R', idxDel[id]?.sides?.to?.path)
+check('送达后收信方仍是 P（未表态）', idxDel[id]?.sides?.to?.path === 'P', idxDel[id]?.sides?.to?.path)
 const idxFromDel = await readJson(join(wsFrom, '.dsh-mail', '_index.json'))
 check('送达后发信方 A>R', idxFromDel[id]?.sides?.from?.path === 'A>R', idxFromDel[id]?.sides?.from?.path)
 
 await box.ack({ mailId: id, close: true })
 const idxTo2 = await readJson(join(wsTo, '.dsh-mail', '_index.json'))
 const idxFrom2 = await readJson(join(wsFrom, '.dsh-mail', '_index.json'))
-check('收信方路径 P>R>D', idxTo2[id]?.sides?.to?.path === 'P>R>D', idxTo2[id]?.sides?.to?.path)
+check('结案后收信方 P>D', idxTo2[id]?.sides?.to?.path === 'P>D', idxTo2[id]?.sides?.to?.path)
 check('发信方路径 A>R>D', idxFrom2[id]?.sides?.from?.path === 'A>R>D', idxFrom2[id]?.sides?.from?.path)
 
 const wsGhost = join(tmp, 'ws-ghost')
@@ -495,6 +495,48 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
     row.status === 'done' && !regLetter.deliveredAt,
     JSON.stringify({ status: row.status, deliveredAt: regLetter.deliveredAt ?? null }),
   )
+}
+
+// ── 回归：投递文本必须带 MARK 能识别的回执标记 ──
+// 2026-11-19 压缩索引文本时把 `〔信箱·M-…〕` 改成了 `〔信箱〕M-…`，
+// noteStep 的 MARK 正则从此匹配不到 → deliveredAt/readAt 永不写 → 三段语义整条链失效。
+// 这条断言锁住首行格式。
+{
+  const markBox = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'mark'),
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const MID = 'M-20261119-7701'
+  await markBox.send({
+    owner: 'K1',
+    peer: 'K2',
+    type: 'S-PROGRESS',
+    body: 'mark',
+    senderSessionId: 'SK1',
+    peerSessionId: 'SK2',
+    mailId: MID,
+  })
+  // 从落盘的索引/账本里拿投递文本不可靠；直接调用内部行为：
+  // 用 noteStep 反证——如果标记对得上，deliveredAt 会被写上。
+  await markBox.noteStep({ id: 'SK2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + MID + '〕' }] }])
+  const st = await markBox.status({ mailId: MID })
+  const row = (st.rows || [])[0] || {}
+  check(
+    '回执标记与 MARK 正则一致（deliveredAt 能写上）',
+    // deliveredAt 优先于 readAt（delivered 是「真的落进对方上下文」的硬证据）
+    ['delivered-unread', 'read-unanswered', 'acknowledged'].includes(row.readState),
+    JSON.stringify({ readState: row.readState }),
+  )
+}
+
+// 直接锁格式：receiptOf 的输出必须能被 MARK 匹配（noteStep 靠它认「送达」）
+{
+  const probe = receiptOf('M-20261119-7702')
+  const hits = [...probe.matchAll(/〔信箱·(M-\d{8}-\d{4})〕/g)].map((m) => m[1])
+  check('回执标记格式可被 MARK 识别', hits.length === 1 && hits[0] === 'M-20261119-7702', JSON.stringify({ probe, hits }))
 }
 
 console.log(lines.join('\n'))

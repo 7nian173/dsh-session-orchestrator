@@ -231,7 +231,7 @@ pending ──push──> pushed ──entered a peer turn──> acked automati
                      └─nobody read in time──> blocked (todo) ──late ack──> acked
 ```
 
-- **Delivery implies receipt**: as soon as a letter reaches one of the receiver's turns the plugin acks it (`autoAcked: true`). You do not need to track whether it was read.
+- **Delivery is not a receipt**: a letter reaching one of the receiver's turns records `deliveredAt` + `readAt` and does **not** auto-ack. Only an explicit reply makes it `acked`. So "did they read it" is `readAt`; "did they respond" is `ackedAt` — two separate facts.
 - Only letters that **never** reached a turn time out into the todo state.
 - `blocked` is **not terminal**: a late ack walks `P>B>R>D`.
 
