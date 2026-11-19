@@ -84,14 +84,21 @@ FatFish-Whisper-workspace-b2b6
 
 ### 在哪注册
 
-在输入框敲 **`/注册好友`**（英文界面是 `/register`），后面跟你要的名字：
+两个命令，分别做两件事：
+
+| 命令 | 作用 |
+|---|---|
+| **`/register-me <名字>`** | 把**自己**登记成这个名字 |
+| **`/register-peer <工作区> <会话id> [名字]`** | 把**别人**加进好友表并命名 |
 
 ```
-/注册好友 FatFish-Whisper-workspace-dispatcher
-/register FatFish-Whisper-workspace-dispatcher
+/register-me 本地-c91e
+/register-peer Super-agent session-42635e1a-0089-425f-9441-7c9b1ffc8431 决策
 ```
 
-回车即注册，会回你一句确认。名字不合规时会直接告诉你规则，不用猜。
+`/register-peer` 省略名字时会自动取「工作区名-会话尾号」；如果有同名工作区，会补路径缩略区分，不用你操心。
+
+回车即执行，会回你一句确认。名字不合规时直接告诉你规则。
 
 也可以在 `@` 菜单里看已经注册了谁，确认没有撞名。
 

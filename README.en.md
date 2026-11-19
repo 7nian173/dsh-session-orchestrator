@@ -84,14 +84,21 @@ For workspace `D:\dshdata\本地` and session `session-...7e5c91e` → **`本地
 
 ### Where to register
 
-Type **`/register`** in the composer (on a Chinese host it is `/注册好友`) followed by the name:
+Two commands, two different jobs:
+
+| Command | Effect |
+|---|---|
+| **`/register-me <name>`** | Register **yourself** under that name |
+| **`/register-peer <workspace> <sessionId> [name]`** | Add **someone else** to the friends table and name them |
 
 ```
-/register FatFish-Whisper-workspace-dispatcher
-/注册好友 FatFish-Whisper-workspace-dispatcher
+/register-me 本地-c91e
+/register-peer Super-agent session-42635e1a-0089-425f-9441-7c9b1ffc8431 决策
 ```
 
-Press Enter to register; you get a confirmation. An invalid name reports the rules instead of guessing.
+Omitting the name in `/register-peer` derives `<workspace>-<last 4 of id>`; colliding workspace names get a path fragment appended, so you need not care.
+
+Press Enter to run; you get a confirmation. An invalid name reports the rules.
 
 You can also open the `@` menu to see who is already registered and confirm there is no collision.
 
