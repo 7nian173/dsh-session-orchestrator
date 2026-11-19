@@ -6,7 +6,7 @@
  *
  * 三段：
  *   1) 语法：node --check 三个 lib 文件
- *   2) 断言：tools/mail-push-test.mjs（55 条）
+ *   2) 断言：tools/mail-push-test.mjs + tools/permit-window-test.mjs
  *   3) 清单：package.json 的 files 逐条存在 + bundle patch 存在
  */
 import { spawnSync } from 'node:child_process'
@@ -30,6 +30,9 @@ for (const file of ['lib/index.js', 'lib/mail.js', 'lib/client.js']) {
 }
 
 run('断言 mail-push-test', [join(root, 'tools/mail-push-test.mjs')])
+// 授权窗口翻页：这段逻辑失效是静默的（长会话里人类自己的请求被门控拦掉），
+// 必须进自检，否则单靠 mail-push-test 全绿也发现不了。
+run('断言 permit-window-test', [join(root, 'tools/permit-window-test.mjs')])
 
 let manifestOk = true
 try {

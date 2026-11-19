@@ -16,7 +16,10 @@ await ensureWorkspaceBox(wsTo)
 const calls = []
 const controller = {
   async prompt(req, signal) {
-    calls.push({ id: req.requestId, hasSignal: !!signal })
+    // 存下真实投递文本：端到端断言要靠它反证 indexNotice 的首行格式。
+    // 只存 requestId 的话，indexNotice 把标记改坏时套件仍是全绿（2026-11-19 事故）。
+    const text = (req.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n')
+    calls.push({ id: req.requestId, hasSignal: !!signal, sessionId: req.sessionId, text })
     if (!signal) throw new Error("Cannot read properties of undefined (reading 'throwIfAborted')")
     return { ok: true }
   },
@@ -537,6 +540,46 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   const probe = receiptOf('M-20261119-7702')
   const hits = [...probe.matchAll(/〔信箱·(M-\d{8}-\d{4})〕/g)].map((m) => m[1])
   check('回执标记格式可被 MARK 识别', hits.length === 1 && hits[0] === 'M-20261119-7702', JSON.stringify({ probe, hits }))
+}
+
+// ── 端到端：真实投递文本的首行必须能被 MARK 认出来 ──
+// 上面两条分别测 receiptOf() 字符串、手写标记喂 noteStep，都绕过了 indexNotice。
+// 2026-11-19 的事故正是 indexNotice 把首行写成 `〔信箱〕M-…`：两条断言全绿，链路全塌。
+// 这一条从 controller.prompt 收到的真实文本取首行，喂给 MARK，再喂 noteStep 看 deliveredAt。
+{
+  const e2e = calls.filter((call) => call.sessionId === 'session-to' && call.text && call.text.includes(id))
+  check('投递文本被捕获', !!e2e.length, JSON.stringify(calls.map((c) => [c.sessionId, (c.text || '').slice(0, 20)])))
+  if (e2e.length) {
+    const e2eText = e2e[0].text
+    const firstLine = e2eText.split('\n')[0]
+    const hits = [...e2eText.matchAll(/〔信箱·(M-\d{8}-\d{4})〕/g)].map((m) => m[1])
+    check('真实投递首行含 MARK 标记', hits.includes(id), JSON.stringify({ firstLine, hits }))
+    check('首行就是回执标记（不是第二行）', firstLine.includes('〔信箱·' + id + '〕'), JSON.stringify(firstLine))
+
+    // 端到端反证：把真实文本喂给 noteStep，deliveredAt 必须写上
+    const e2eBox = createMailbox({
+      ackTimeoutMs: 60000,
+      cwdOf: async () => join(tmp, 'e2e'),
+      isArchived: async () => false,
+      log: () => {},
+      service: () => undefined,
+    })
+    const EID = 'M-20261119-7703'
+    await e2eBox.send({
+      owner: 'E1', peer: 'E2', type: 'S-PROGRESS', body: 'e2e',
+      senderSessionId: 'SE1', peerSessionId: 'SE2', mailId: EID,
+    })
+    // 用与真实投递同构的文本（借 indexNotice 的产物：真实 calls 里的那条格式）
+    const synthetic = e2eText.replace(id, EID)
+    await e2eBox.noteStep({ id: 'SE2' }, [{ role: 'user', content: [{ type: 'text', text: synthetic }] }])
+    const st = await e2eBox.status({ mailId: EID })
+    const row = (st.rows || [])[0] || {}
+    check(
+      '真实格式的投递文本能驱动送达',
+      ['delivered-unread', 'read-unanswered', 'acknowledged'].includes(row.readState),
+      JSON.stringify({ readState: row.readState, synthetic: synthetic.split('\n')[0] }),
+    )
+  }
 }
 
 console.log(lines.join('\n'))
