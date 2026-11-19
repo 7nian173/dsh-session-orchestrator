@@ -33,6 +33,60 @@ What it gives you:
 - **Urgent.** Urgent letters jump the queue regardless of whether the target is busy.
 - **Groups form automatically.** After a few round trips the pair gets a group and routes through it.
 
+## Friend registration and naming
+
+For others to find you, you need to **register a name**. A name is an address, not a nickname — sending letters, `@` search and jumps all resolve through it.
+
+### What a name looks like
+
+1–32 characters: letters, digits, `_`, `-` and **CJK**.
+
+```
+lead
+会话编排插件维护者
+FatFish-Whisper-workspace-b2b6
+本地-c91e
+```
+
+### Why a prefix is recommended
+
+Names are **global**: there is a single friends table on the machine. If two projects both use `lead`, the later registration replaces the earlier one — so a letter meant for "your project's lead" may land in another project's lead.
+
+The convention is **`<workspace group>-<role or purpose>`**:
+
+| Case | Preferred | Avoid |
+|---|---|---|
+| Dispatcher inside one project | `FatFish-Whisper-workspace-dispatcher` | `dispatcher` |
+| Two sessions in the same workspace | `本地-c91e`, `本地-796a` | `A`, `B` |
+| A team's lead | `Super-agent-lead` | `lead` |
+
+**The prefix is a collision guard you apply for yourself** — the plugin does not enforce it. Names without a prefix work fine; they just collide sooner as projects multiply.
+
+### Auto-registered names
+
+When the plugin creates a session for you it registers automatically, with a fixed format:
+
+```
+<workspace folder name>-<last 4 of sessionId>
+```
+
+For workspace `D:\dshdata\本地` and session `session-...7e5c91e` → **`本地-c91e`**.
+
+- **The workspace segment is never dropped.** Sessions in one workspace can differ only in the last four characters; across workspaces only the prefix distinguishes them.
+- A collision on the last four (rare within one workspace) appends `-2`, `-3`.
+- For a custom prefix, set `childNamePrefix` in settings.
+
+### Renaming and history
+
+- A session has exactly one **primary name**; re-registering replaces it.
+- To keep an old name alive (say a doc still references the English one), add a second record for the same session in `friends.json` — both resolve.
+- Names do **not** follow session title changes; renaming a session leaves the name unchanged.
+
+### Where to register
+
+- Have your assistant call `session_register_name` with the name you want.
+- Or open the `@` menu to see who is already registered and confirm there is no collision.
+
 ## `@`-mention people
 
 Type `@` in the composer. Besides the built-in "reference files and past sessions" there is a **Friends** category, each row showing `name · session id`.
