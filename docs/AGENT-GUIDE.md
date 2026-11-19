@@ -180,6 +180,9 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 ### 状态字母固定英文，不要翻译
 
+> **送达 ≠ 已读 ≠ 已回。** 三件事分开：信进到对方上下文只算「已送达」，对方明确 `mail_ack` 才算「已回」。
+> `mail_status` 的 `readState` 字段说明走到哪一步：`sent` / `delivered-unread` / `read-unanswered` / `acknowledged`。
+
 | 字母 | 目录 | 含义 |
 |---|---|---|
 | `A` | Sent | 已发出，等回执 |
@@ -193,7 +196,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 ### `done` 不可撤销，`acked` 可以
 
-- `acked` 只表示「收到并开始处理」，不代表结果被接受；撤销它会记 `expiredAfterAck: true`。
+- `acked` 表示**对方明确回过执**（不是插件自动标记的已读）。三段用 `deliveredAt` / `readAt` / `ackedAt` 区分；撤销已 acked 的信会记 `expiredAfterAck: true`。
 - `done` 是已结案，撤销请求会被拒。
 
 ---
