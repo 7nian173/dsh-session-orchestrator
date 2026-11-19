@@ -762,5 +762,139 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   check('索引两侧 delivered 字母对称', fromCode === toCode && fromCode === 'R', JSON.stringify({ from: fromCode, to: toCode }))
 }
 
+// ── 回归：blocked 也是终态，noteStep 不能给它补写送达证据 ──
+// block() 与 armTimer() 都把 blocked 当终态，只有 noteStep 漏了。
+// 实验室实测 M-0034：13:19 超时转 blocked → 13:26 持有卡投进上下文 →
+// noteStep 写出 deliveredAt/readAt（readSource='in-turn'），
+// 一封从没进过任何一轮的待办信，账本上多出一条「送达」。
+{
+  const blkBox = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'blk'),
+    cwds: async () => [join(tmp, 'blk')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const BID = 'M-20261119-8001'
+  await blkBox.send({
+    owner: 'K1', peer: 'K2', type: 'S-PROGRESS', body: 'blocked',
+    senderSessionId: 'SK1', peerSessionId: 'SK2', mailId: BID,
+  })
+  const blkLetters = join(tmp, 'blk', '.dsh-mail', '_letters.json')
+  const bBefore = await readJson(blkLetters)
+  const bTarget = (bBefore.letters || []).find((e) => e.id === BID)
+  if (bTarget) {
+    bTarget.status = 'blocked'
+    bTarget.blockedAt = new Date().toISOString()
+    bTarget.deliveredAt = null
+    bTarget.readAt = null
+    bTarget.deadline = Date.now() + 60000
+    await writeFile(blkLetters, JSON.stringify(bBefore, null, 2), 'utf8')
+  }
+  const blkBox2 = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'blk'),
+    cwds: async () => [join(tmp, 'blk')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  // 让回执标记「再次进到某一轮」（模拟持有卡二次投递）
+  await blkBox2.noteStep({ id: 'SK2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + BID + '〕' }] }])
+  const bAfter = await readJson(blkLetters)
+  const bNow = (bAfter.letters || []).find((e) => e.id === BID)
+  check(
+    'blocked 信收到回执标记不补写送达证据',
+    bNow && bNow.deliveredAt === null && bNow.readAt === null,
+    JSON.stringify({ deliveredAt: bNow && bNow.deliveredAt, readAt: bNow && bNow.readAt, status: bNow && bNow.status }),
+  )
+  check('blocked 信不会被 noteStep 改状态', bNow && bNow.status === 'blocked', JSON.stringify({ status: bNow && bNow.status }))
+}
+
+// ── 回归：read-unanswered 必须可达（`读到没表态` 与 `没读过` 要能分开）──
+// noteStep 写 deliveredAt 的同时也写 readAt（readSource='in-turn'），
+// 所以「deliveredAt 优先」的旧顺序让 read-unanswered 永远走不到。
+// 真读过 = readSource==='inbox-pull'（对方主动调 mail_inbox 查未读）。
+{
+  const rdBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => join(tmp, 'rd'),
+    cwds: async () => [join(tmp, 'rd')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const RID = 'M-20261119-8002'
+  await rdBox.send({
+    owner: 'R1', peer: 'R2', type: 'S-PROGRESS', body: 'read',
+    senderSessionId: 'SR1', peerSessionId: 'SR2', mailId: RID,
+  })
+  // ① 只进了某一轮（in-turn）→ 应报 delivered-unread，不是 read-unanswered
+  await rdBox.noteStep({ id: 'SR2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + RID + '〕' }] }])
+  const stInTurn = await rdBox.status({ mailId: RID })
+  const rowInTurn = (stInTurn.rows || [])[0] || {}
+  check('仅 in-turn 时报 delivered-unread', rowInTurn.readState === 'delivered-unread', JSON.stringify({ readState: rowInTurn.readState }))
+
+  // ② 本人主动拉取（inbox-pull）→ 应升级为 read-unanswered
+  await rdBox.inbox({ sessionId: 'SR2' })
+  const stPulled = await rdBox.status({ mailId: RID })
+  const rowPulled = (stPulled.rows || [])[0] || {}
+  check('本人拉取后升级为 read-unanswered', rowPulled.readState === 'read-unanswered', JSON.stringify({ readState: rowPulled.readState, readSource: rowPulled.readSource }))
+}
+
+// ── 回归：readState 的分支顺序本身（与 inbox 升级解耦）──
+// 上面那条靠真实 inbox 拉取验证，但它同时依赖两处改动；这里直接构造
+// 「readAt 有值 + readSource='inbox-pull' + deliveredAt 有值」的落盘状态，
+// 只要 readState 的分支顺序退回去就会红。
+{
+  const ordBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => join(tmp, 'ord'),
+    cwds: async () => [join(tmp, 'ord')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const OID = 'M-20261119-8003'
+  await ordBox.send({
+    owner: 'O1', peer: 'O2', type: 'S-PROGRESS', body: 'ord',
+    senderSessionId: 'SO1', peerSessionId: 'SO2', mailId: OID,
+  })
+  const ordLetters = join(tmp, 'ord', '.dsh-mail', '_letters.json')
+  const oBefore = await readJson(ordLetters)
+  const oTarget = (oBefore.letters || []).find((e) => e.id === OID)
+  if (oTarget) {
+    const nowIso = new Date().toISOString()
+    oTarget.deliveredAt = nowIso
+    oTarget.readAt = nowIso
+    oTarget.readSource = 'inbox-pull'
+    await writeFile(ordLetters, JSON.stringify(oBefore, null, 2), 'utf8')
+  }
+  const ordBox2 = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => join(tmp, 'ord'),
+    cwds: async () => [join(tmp, 'ord')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const stOrd = await ordBox2.status({ mailId: OID })
+  const rowOrd = (stOrd.rows || [])[0] || {}
+  // 先把「改动是否真的落到盘上」验一遍，否则分支顺序断言是空转的
+  const oAfter = await readJson(ordLetters)
+  const oNow = (oAfter.letters || []).find((e) => e.id === OID)
+  check(
+    '分支顺序测试的前置状态已落盘',
+    oNow && Boolean(oNow.deliveredAt) && Boolean(oNow.readAt) && oNow.readSource === 'inbox-pull',
+    JSON.stringify({ deliveredAt: oNow && oNow.deliveredAt, readAt: oNow && oNow.readAt, readSource: oNow && oNow.readSource }),
+  )
+  check(
+    'read-unanswered 优先于 delivered-unread（分支顺序）',
+    rowOrd.readState === 'read-unanswered',
+    JSON.stringify({ readState: rowOrd.readState, readSource: rowOrd.readSource, exists: Boolean(oNow) }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
