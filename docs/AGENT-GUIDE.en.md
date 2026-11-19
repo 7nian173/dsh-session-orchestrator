@@ -291,6 +291,7 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 | `MAIL_NOT_FOUND` | Unknown mail_id | Confirm the real id with `mail_inbox` / `mail_list` |
 | `FRIEND_NOT_FOUND` | Name not registered | Check `session_list_names`, or pass a sessionId |
 | `FRIEND_ARCHIVED` | The name belongs to an archived session | Pick a live target; archived sessions **do not exist** as far as this plugin is concerned |
+| `注册时出错：…` | An internal exception was caught and surfaced as text | Act on the message after the colon; this is **always visible**, never silent |
 | `SENDER_NOT_REGISTERED` | You are not registered | `session_register_name` |
 | `CROSS_WORKSPACE_DISABLED` | Cross-workspace refused | A human must enable it in settings |
 | `TARGET_ARCHIVED` | Target session archived | Pick another target |
