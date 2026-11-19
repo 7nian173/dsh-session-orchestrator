@@ -197,6 +197,7 @@ Everything else is **written to disk only**. Therefore:
 - **Auto-registered name** format: `<workspace folder name>-<last 4 of sessionId>`, e.g. `本地-c91e`. The workspace prefix is never dropped.
 - One primary name per session; re-registering replaces it. To keep an old name alive, add a second entry with the same `sessionId` in `$DSH_HOME/session-bridge/friends.json`.
 - **`@` menu**: typing `@` offers a **Friends** category showing `name · session id`; selecting inserts a native session reference `@[name](dsh-session:…)`.
+- **Slash command**: a human can type `/register <name>` (Chinese host: `/注册好友 <name>`) to register without hunting for the tool. The host `commands` service executes it; it does not enter the model context.
 
 ---
 

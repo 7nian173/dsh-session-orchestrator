@@ -84,8 +84,16 @@ FatFish-Whisper-workspace-b2b6
 
 ### 在哪注册
 
-- 让助手执行 `session_register_name`，参数就是你要的名字。
-- 或者在 `@` 菜单里看已经注册了谁，确认没有撞名。
+在输入框敲 **`/注册好友`**（英文界面是 `/register`），后面跟你要的名字：
+
+```
+/注册好友 FatFish-Whisper-workspace-dispatcher
+/register FatFish-Whisper-workspace-dispatcher
+```
+
+回车即注册，会回你一句确认。名字不合规时会直接告诉你规则，不用猜。
+
+也可以在 `@` 菜单里看已经注册了谁，确认没有撞名。
 
 ## @ 一下找人
 

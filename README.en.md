@@ -84,8 +84,16 @@ For workspace `D:\dshdata\本地` and session `session-...7e5c91e` → **`本地
 
 ### Where to register
 
-- Have your assistant call `session_register_name` with the name you want.
-- Or open the `@` menu to see who is already registered and confirm there is no collision.
+Type **`/register`** in the composer (on a Chinese host it is `/注册好友`) followed by the name:
+
+```
+/register FatFish-Whisper-workspace-dispatcher
+/注册好友 FatFish-Whisper-workspace-dispatcher
+```
+
+Press Enter to register; you get a confirmation. An invalid name reports the rules instead of guessing.
+
+You can also open the `@` menu to see who is already registered and confirm there is no collision.
 
 ## `@`-mention people
 
