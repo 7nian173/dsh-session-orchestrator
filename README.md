@@ -152,7 +152,17 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 另外三个常量级的护栏：拒绝盘符根/层级过浅、拒绝用户主目录、拒绝系统目录与应用安装目录；每次删除都写 `deleted-workspaces.jsonl` 留痕。
 
-`init_workspace` 用**黑名单**拦：拒绝盘符根、系统目录、`DSH_HOME` 本身，**不限定盘符**（真实项目分散在 `E:` / `F:` / `D:\文档`，白名单会误杀）。`probe_workspace_stream` 的探针目录固定在队列根内，忽略外部传入的 `probeDir`。
+受保护目录**全部从环境自动获取，不硬编码盘符**（别人的系统盘可能不是 C:）：
+
+| 来源 | 类别 | 含义 |
+|---|---|---|
+| `SystemRoot` / `windir` / `ProgramFiles` / `ProgramFiles(x86)` / `ProgramData` | tree | 自身与所有子目录都不许建、不许删 |
+| `process.execPath` 上一级、`process.resourcesPath` 上一级 | tree | **应用安装目录**；DSH 升级会清空重建它，所以每次调用现算 |
+| `DSH_HOME`、`USERPROFILE` | exact | **只拦自身**，子目录放行——真实项目就在它们下面 |
+| 配置 `guardedPaths`（字符串数组） | tree | 用户自己补的额外禁区 |
+
+`init_workspace` 用这套黑名单拦盘符根与受保护目录，不限定盘符（真实项目散落在 `E:` / `F:` / `D:\文档`，白名单会误杀）。
+`probe_workspace_stream` 的探针目录固定在队列根内，忽略外部传入的 `probeDir`。
 
 ### 浏览器 HTTP 路由
 
