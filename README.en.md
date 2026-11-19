@@ -1,10 +1,12 @@
 # Session Orchestrator
 
-> **If you are an agent, skip this file.** Read the [Agent Guide](./AGENT-GUIDE.en.md) instead.
+> **If you are an agent, skip this file.** Read the [Agent Guide](./docs/AGENT-GUIDE.en.md) instead.
 >
-> 如果你是人，想看中文说明 → [中文 README](../README.md)
+> 如果你是人，想看中文说明 → [中文 README](./README.md)
 
 Installing this gives your sessions four capabilities: **start new sessions, jump between them, write letters to each other, and `@`-mention people**.
+
+In one line: **spin up a new workspace in a sentence, have your agent jump to any session, and let agents talk across sessions (and across workspaces) through a mailbox.**
 
 ## Start a new session
 
@@ -38,6 +40,84 @@ Type `@` in the composer. Besides the built-in "reference files and past session
 Selecting one inserts a real session reference (clickable), not dead text.
 
 Names may be Chinese, so you can register something like `会话编排插件维护者` and find it by Chinese search in `@` too.
+
+## It touches your disk — read this first
+
+This plugin does things that go **beyond an ordinary sandbox**. Below is what it changes on your filesystem without asking again.
+
+### It creates directories inside other people's workspaces
+
+When a friend connection is made, when the first letter is sent, or when talking across workspaces, the plugin creates a `.dsh-mail/` directory **inside the other side's workspace**:
+
+```
+.dsh-mail/_letters.json      letter state
+.dsh-mail/envelope/          envelopes (the body lives here)
+.dsh-mail/_index.json        status index (A/P/R/B/D/E paths)
+.dsh-mail/_ledger.json       operation ledger
+.dsh-mail/group.json         group routing table
+.dsh-mail/_courier.json      delivery channel
+```
+
+**Why**: the ledger and delivery mechanism need to persist. Without it a letter has no traceable carrier.
+
+This is created in the workspace you connect to, not only your own. Back up `.dsh-mail/` before deleting a workspace — it is not tracked by git.
+
+### Letter bodies are real files
+
+A letter is not a "message"; it is a **Markdown file on disk**. The body goes to `.dsh-mail/envelope/<id>.to.md`, and the receiver gets an index line (source, location, status).
+
+**Only notifications enter the LLM context.** What the plugin pushes is a short notice ("you have unread mail", "X wrote to you"). The body is **never injected** into the receiver's conversation; reading it is the receiver's decision.
+
+### It creates, archives and deletes sessions and workspaces
+
+| Action | Effect |
+|---|---|
+| Create workspace | `mkdir` at the given path, then register it in DSH's workspace list |
+| Create session | Start a new session in that workspace, optionally with a preset |
+| Delete workspace | Remove it from DSH's list; **with `removeDir` it deletes the whole directory recursively** |
+
+Deletion is **not recoverable**. Two gates exist (below), but what gets deleted ultimately depends on the confirmation you give.
+
+### It can post into any session
+
+It calls `prompt` to place text into any session's next turn. That equals **speaking inside someone else's conversation under your identity**.
+
+- Notifications use this channel by default, so they appear in the receiver's transcript.
+- They carry machine prefixes such as `〔信箱·…〕`, but visually they look like ordinary human messages.
+
+### It reads and writes a global friends table
+
+`$DSH_HOME/session-bridge/friends.json` maps names to session ids. Any session can read it and change it (`session_register_name`).
+
+Names are therefore **global and overwritable**: if two projects both use `lead`, the later registration wins.
+
+### It reads DSH's own state files
+
+To know which sessions are archived and what their titles are, the plugin reads DSH's own storage:
+
+```
+$DSH_HOME/storages/workspace.json        archived session ids
+$DSH_HOME/storages/session_projcache/    session title cache
+$DSH_HOME/session-bridge/friends.json    friends table
+```
+
+Host services are preferred; these files are only a fallback when a service is unavailable, and they are **read-only**.
+
+### What it does not do
+
+- It does not read your source code, execute anything, or reach the external network.
+- It does not modify files outside `.dsh-mail/` in any workspace.
+- It does not modify DSH's own storage files (read-only).
+- It does not delete a directory recursively without the confirmation gate (on by default).
+
+### Two gates
+
+| Gate | Effect |
+|---|---|
+| **Protected directories** | System directories, program directories, the **application install directory**, `DSH_HOME`, and the user home are never created in or deleted. The install directory matters most: every DSH upgrade wipes and rebuilds it |
+| **Second confirmation** | Recursive deletion requires an explicit "确认删除" with a token, valid for 10 minutes |
+
+Both are adjustable in settings: protected directories can only be **extended**, never reduced; the second confirmation can be switched off (path guards still apply when it is).
 
 ## Settings
 
