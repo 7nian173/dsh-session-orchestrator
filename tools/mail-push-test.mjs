@@ -473,7 +473,57 @@ const banner = await gateBox.stepBanner({ id: 'S61' })
 check('stepBanner 有未读时给一行', Boolean(bannerMail.ok) && typeof banner === 'string' && /信箱·开工检查/.test(banner) && /mail_inbox/.test(banner), String(banner))
 const bannerEmpty = await gateBox.stepBanner({ id: 'S99' })
 check('stepBanner 无未读时安静', bannerEmpty === null, String(bannerEmpty))
+// 横幅要带上「此刻几点」和「积压多久」：
+// 模型拿到的应当是一个**时间切片**，而不是来一封收一条零散提醒。
+// 只有绝对时刻时，它无法区分「刚来的」和「压了两小时的」。
+check(
+  'stepBanner 带当前时刻',
+  /\d{2}:\d{2}（UTC[+-]\d{2}:\d{2}）/.test(String(banner)),
+  String(banner).slice(0, 40),
+)
+check('stepBanner 带积压时长', /积压/.test(String(banner)), String(banner).slice(0, 80))
 await gateBox.ack({ mailId: 'M-20261118-9107', close: true })
+
+// 积压跨度：多封且时间分散时，要能看出「不是一批」
+{
+  const spanWs = join(tmp, 'span')
+  await ensureWorkspaceBox(spanWs)
+  const spanBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => spanWs,
+    cwds: async () => [spanWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  for (const id of ['M-20261119-9201', 'M-20261119-9202', 'M-20261119-9203']) {
+    await spanBox.send({
+      owner: 'S' + id.slice(-1), peer: 'R', type: 'S-PROGRESS', body: 'x',
+      senderSessionId: 'SS' + id.slice(-1), peerSessionId: 'RSPAN', mailId: id,
+    })
+  }
+  const spanPath = join(spanWs, '.dsh-mail', '_letters.json')
+  const spanRaw = await readJson(spanPath)
+  const shift = { 'M-20261119-9201': 3 * 3600 * 1000, 'M-20261119-9202': 40 * 60 * 1000, 'M-20261119-9203': 2 * 60 * 1000 }
+  for (const entry of spanRaw.letters || []) {
+    if (shift[entry.id]) entry.sentAt = new Date(Date.now() - shift[entry.id]).toISOString()
+  }
+  await writeFile(spanPath, JSON.stringify(spanRaw, null, 2), 'utf8')
+  const spanBox2 = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => spanWs,
+    cwds: async () => [spanWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const spanBanner = await spanBox2.stepBanner({ id: 'RSPAN' })
+  check(
+    'stepBanner 能区分「不是一批」（带跨度）',
+    typeof spanBanner === 'string' && /跨度/.test(spanBanner) && /最早/.test(spanBanner) && /最新/.test(spanBanner),
+    String(spanBanner),
+  )
+}
 
 // 安全闸：mail_id 会被直接拼进信封文件名，穿越必须拒
 const guardBox = createMailbox({ ackTimeoutMs: 600000, service: () => undefined, log: () => {}, cwdOf: async () => wsGate })
