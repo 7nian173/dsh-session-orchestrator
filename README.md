@@ -143,6 +143,11 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 可用 action 有 `deliver`、`sessions`、`events`、`init_workspace`、`handoff`、`notify`、`relay`、`list_children`、`jump`、`delete_workspace`、`probe_workspace_stream`，信箱相关的有 `mail_send`、`mail_ack`、`mail_inbox`、`mail_friends`、`mail_list`、`mail_status`、`mail_pause`、`mail_group`；只读探针 `peer_state` 用来问某个会话现在忙不忙。同一个 id 不会处理两次，用相同 id 重试拿到的是第一次的结果。
 
+### 浏览器 HTTP 路由
+
+所有 `/session-bridge/*` HTTP 路由在进入 handler 前，都会先调用 DSH 的 `connection.requestRejection(req)`：
+未通过访问检查的请求直接返回 **401 / 403**，不会执行任何动作。插件在 `inject` 里声明了 `webServer` 与 `connection` 两个依赖。
+
 ### 模型工具，给 Agent
 
 共 12 个。

@@ -143,6 +143,10 @@ No login state, no listening port. Drop JSON into one directory, read the result
 
 Available actions are `deliver`, `sessions`, `events`, `init_workspace`, `handoff`, `notify`, `relay`, `list_children`, `jump`, `delete_workspace`, and `probe_workspace_stream`; mailbox actions are `mail_send`, `mail_ack`, `mail_list`, `mail_status`, `mail_pause`, and `mail_group`; the read-only `peer_state` probe reports whether a session is busy. One id is never processed twice, so retrying with the same id returns the first result.
 
+### Browser HTTP routes
+
+Every `/session-bridge/*` HTTP route calls DSH's `connection.requestRejection(req)` before its handler runs: a request that fails the access check gets **401 / 403** and performs no action. The plugin declares both `webServer` and `connection` in `inject`.
+
 ### Model tools, for agents
 
 Eleven in total.
