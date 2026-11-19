@@ -144,7 +144,7 @@ await chSoft.pause({ do: 'resume', cwd: wsCh })
 void pausedUrgentBase
 
 check('加急条目带 urgent 标记', (expQueue.items || []).some((item) => item.mailId === 'M-20261118-9002' && item.urgent === true), JSON.stringify((expQueue.items || []).map((i) => [i.mailId, i.urgent])))
-check('文案带时间戳', (expCalls[0] ? /现在 \d{2}:\d{2}.*本信 \d{2}:\d{2}/.test(expCalls[0].text) : false), expCalls[0] ? expCalls[0].text.slice(0, 40) : '')
+check('文案带绝对时间戳', (expCalls[0] ? /本信发出于 \d{2}:\d{2}（UTC[+-]\d{2}:\d{2}，本机时区）/.test(expCalls[0].text) : false), expCalls[0] ? expCalls[0].text.slice(0, 44) : '')
 busy2 = false
 
 
