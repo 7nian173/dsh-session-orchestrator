@@ -67,6 +67,7 @@ const makeController = (records) => {
  * 队列根目录用临时目录，避免污染真实的 session-bridge。
  */
 const start = async (records, { askPresetOnCreate = false } = {}) => {
+  const hooks = new Map()
   const root = await mkdtemp(join(tmpdir(), 'permit-ws-'))
   await mkdir(join(root, 'inbox'), { recursive: true })
   const controller = makeController(records)
@@ -88,14 +89,19 @@ const start = async (records, { askPresetOnCreate = false } = {}) => {
       if (key === 'commands') return { register: () => () => {} }
       return undefined
     },
-    on: () => () => {},
+    on: (event, handler) => {
+      // 记下 agent/pre-step：种子授权（grantHumanPermit）走这条路，
+      // 而 humanPermits → peekHumanPermit 这条分支此前零覆盖。
+      if (event === 'agent/pre-step') hooks.set('agent/pre-step', handler)
+      return () => {}
+    },
     effect: (fn) => {
       const dispose = fn()
       return typeof dispose === 'function' ? dispose : () => {}
     },
   }
   apply(ctx, { dir: root, dispatcher: true, pollMs: 60, sweepFriends: false, askPresetOnCreate })
-  return { root, controller }
+  return { root, controller, hooks }
 }
 
 /** 投一个 init_workspace 请求，等 dispatcher 出结果。 */
@@ -250,6 +256,70 @@ const gated = (result) => codeOf(result) === 'AGENT_CREATE_DISABLED'
     JSON.stringify({ code: codeOf(second), pagesAfterFirst, pagesTotal: controller.calls.length }),
   )
   check('场景8 确实翻了 2 页以上', controller.calls.length > pagesAfterFirst, JSON.stringify({ pagesAfterFirst, pagesTotal: controller.calls.length }))
+  await rm(root, { recursive: true, force: true })
+}
+
+// ── 场景 9：humanPermits 路径（种子授权）也要遵守「失败不烧、成功才耗」 ──
+// 这条路径此前零覆盖：/new-workspace 命令与自然语言种子都走 grantHumanPermit，
+// 而 peek/commit/release 存在的理由正是这条路径。若不测，把它改回 takeHumanPermit
+// 也不会有人发现（复审实测：那样改完 15 条断言仍全绿）。
+{
+  const records = [] // 事件表里没有任何意图消息，只要种子授权这一条路
+  for (let seq = 1; seq <= 50; seq += 1) records.push(agentEvent(seq, 'x'))
+  const { root, hooks } = await start(records, { askPresetOnCreate: true })
+
+  const preStep = hooks.get('agent/pre-step')
+  check('场景9 pre-step 钩子已注册', typeof preStep === 'function', typeof preStep)
+
+  if (typeof preStep === 'function') {
+    // 人类说「帮我建个工作区」→ 种子记一次授权
+    // 注意：种子读的是 **next() 返回的 decision.messages**，不是 payload.messages。
+    // 传给 payload 的东西没人看（我第一版就这么写，种子永远不触发）。
+    await preStep(
+      { agent: { id: 'session-seed' }, step: 1 },
+      // kind 必须是 'enter'：pre-step 只在真正要进模型的那一刻才跑种子
+      // （decision.kind === 'enter'，见 lib/index.js 里那层判断）。
+      async () => ({
+        kind: 'enter',
+        messages: [{ id: 'm1', role: 'user', content: [{ type: 'text', text: PERMIT_TEXT }] }],
+      }),
+    )
+
+    // 第一次：不带 preset → 业务拒（PRESET_REQUIRED），授权不该被烧掉
+    const first = await submit(root, 'session-seed', { omitPreset: true })
+    check('场景9 首次因缺预设失败', codeOf(first) === 'PRESET_REQUIRED', JSON.stringify({ code: codeOf(first) }))
+
+    // 第二次：补上 preset → 授权还在，应当通过
+    const second = await submit(root, 'session-seed')
+    check('场景9 种子授权在业务失败后仍可用', !gated(second), JSON.stringify({ code: codeOf(second) }))
+
+    // 第三次：授权已被第二次用掉，应当拒绝
+    const third = await submit(root, 'session-seed')
+    check('场景9 种子授权成功后被消耗', gated(third), JSON.stringify({ code: codeOf(third) }))
+  }
+  await rm(root, { recursive: true, force: true })
+}
+
+// ── 场景 10：并发时同一份授权只能放行一次 ──
+// 复审实测过的回归：peek 之后到 take 之间有 await（controller.create），
+// 而 drain() 并发跑（maxConcurrent 默认 4）。没有预留表时，两条 init_workspace
+// 会同时 peek 到同一份授权、同时通过门控 → 一句人类消息建出两个会话。
+{
+  const records = []
+  for (let seq = 1; seq <= 300; seq += 1) {
+    records.push(seq === 20 ? humanEvent(20, PERMIT_TEXT) : agentEvent(seq, 'x'))
+  }
+  const { root, controller } = await start(records)
+  // 让 create 慢一点，把并发的窗口撑开
+  const originalCreate = controller.create.bind(controller)
+  controller.create = async (...args) => {
+    await new Promise((r) => setTimeout(r, 300))
+    return originalCreate(...args)
+  }
+  // 两个请求同时进队列 → drain 会并发处理
+  const [a, b] = await Promise.all([submit(root, 'session-race'), submit(root, 'session-race')])
+  const passes = [a, b].filter((r) => !gated(r)).length
+  check('并发下同一份授权只放行一次', passes === 1, JSON.stringify({ passes, a: codeOf(a), b: codeOf(b) }))
   await rm(root, { recursive: true, force: true })
 }
 

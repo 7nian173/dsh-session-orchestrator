@@ -607,6 +607,9 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   check('落盘里找到待改的信', Boolean(target), JSON.stringify((before.letters || []).map((e) => e.id)))
   if (target) {
     target.deadline = null // null 与 NaN 走同一条兜底分支
+    // 把 sentAt 改到很久以前：模拟「一封早该超时的信，账本里 deadline 坏了」。
+    // 兜底若拿 now 当基准，会把它续成「现在 + 一个完整窗口」= 凭空放它一马。
+    target.sentAt = new Date(Date.now() - 30 * 60 * 1000).toISOString()
     await writeFile(lettersPath, JSON.stringify(before, null, 2), 'utf8')
   }
 
@@ -629,10 +632,68 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   await new Promise((r) => setTimeout(r, 1500)) // 超过 1 秒，旧代码此时已成 blocked
   const st2 = await nanBox2.status({ mailId: NID })
   const row2 = (st2.rows || [])[0] || {}
+  // 这封信的 sentAt 在 30 分钟前、窗口 60 秒 → 它**本该**超时，blocked 是正确结果。
+  // 要验的不是「它没被 block」，而是「它没被当成刚发出的信而续命」——
+  // 旧实现（base = now）会算出 now+60s，于是它活过来、status 还是 pending。
   check(
-    'deadline 非法不会把信在 1 秒内打成待办',
-    row2.status !== 'blocked' && Boolean(row2.status),
+    'deadline 非法 + 已过期 → 该超时就超时（不续命）',
+    row2.status === 'blocked',
     JSON.stringify({ status: row2.status, deadline: row2.deadline }),
+  )
+  // 续命检查：这封信 30 分钟前就该超时了，修 deadline 不能把它救回来。
+  // 判据是 deadline 落回「sentAt + 窗口」附近，而不是 now + 窗口。
+  const repairedDeadline = Number(row2.deadline)
+  const sentMs = Date.now() - 30 * 60 * 1000
+  check(
+    'deadline 兜底按 sentAt 算，不给过期信续命',
+    Number.isFinite(repairedDeadline) && repairedDeadline < Date.now() + 5000 && repairedDeadline < sentMs + 120000,
+    JSON.stringify({ repairedDeadline, sentMs, now: Date.now(), deltaFromSent: repairedDeadline - sentMs }),
+  )
+  // 落盘检查：修复必须进账本，否则每次重启都重算一遍，磁盘上永远是 null。
+  // ⚠️ 必须在「这封信不会走 block 路径」的场景里测：
+  // block() 内部自己会 save()，那会顺带把修复写进去，掩盖掉「armTimer 修了但没落盘」。
+  // 所以下面单独造一封 sentAt 在**未来窗口内**的信（不超时），只验落盘。
+  const PID = 'M-20261119-7802'
+  const persistBox = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'persist'),
+    cwds: async () => [join(tmp, 'persist')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await persistBox.send({
+    owner: 'P1', peer: 'P2', type: 'S-PROGRESS', body: 'persist',
+    senderSessionId: 'SP1', peerSessionId: 'SP2', mailId: PID,
+  })
+  const persistLetters = join(tmp, 'persist', '.dsh-mail', '_letters.json')
+  const pBefore = await readJson(persistLetters)
+  const pTarget = (pBefore.letters || []).find((entry) => entry.id === PID)
+  if (pTarget) {
+    pTarget.deadline = null
+    pTarget.sentAt = new Date().toISOString() // 刚发出，窗口 60 秒，不会超时
+    await writeFile(persistLetters, JSON.stringify(pBefore, null, 2), 'utf8')
+  }
+  const persistBox2 = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'persist'),
+    cwds: async () => [join(tmp, 'persist')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await persistBox2.status({ mailId: PID })
+  const sweep2 = await persistBox2.sweepAtStart()
+  const pAfter = await readJson(persistLetters)
+  const pPersisted = (pAfter.letters || []).find((entry) => entry.id === PID)
+  // 两个条件都要：armTimer 真的修了（repaired>=1）**且** 磁盘上不再是 null。
+  // 只看 repaired 会漏掉「修了但没 save」——那正是复审报的洞。
+  check(
+    'deadline 修复已写回账本（不经 block 路径）',
+    // 注意 `Number(null) === 0` 且 isFinite(0) 是 true —— 直接 Number.isFinite(Number(x))
+    // 会把 null 当成合法值放过去（我第一版就栽在这，回归测试时才发现）。
+    sweep2.repaired >= 1 && pPersisted && typeof pPersisted.deadline === 'number' && Number.isFinite(pPersisted.deadline),
+    JSON.stringify({ persisted: pPersisted && pPersisted.deadline, repaired: sweep2.repaired }),
   )
 }
 
