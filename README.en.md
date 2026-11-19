@@ -111,6 +111,21 @@ Two commands, two different jobs:
 
 Press Enter to run; you get a confirmation. An invalid name reports the rules.
 
+### You do not have to type the full command name
+
+DSH completes it for you: type **`/rep`** or **`/rem`** in the composer, pick the matching row and press **Tab** to complete the name, then add your arguments.
+
+```
+/rep⌨  → completes to /register-peer or /register-me (whichever you picked with Tab)
+```
+
+The difference between the two:
+
+- **`/register-me`** — name yourself; the argument is the name you want
+- **`/register-peer`** — name someone else; the argument is a session name or session id (name optional)
+
+**Note**: pressing Enter on a bare command name does nothing — DSH waits for arguments. Always include an argument before pressing Enter.
+
 You can also open the `@` menu to see who is already registered and confirm there is no collision.
 
 ## `@`-mention people
