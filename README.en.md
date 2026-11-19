@@ -4,6 +4,20 @@
 >
 > 如果你是人，想看中文说明 → [中文 README](./README.md)
 
+This document is **for humans**. The plugin ships two manuals aimed at assistants:
+
+| Document | Audience | When |
+|---|---|---|
+| **This README** | humans | what it does, how to install, how to use |
+| [**Agent Guide**](./docs/AGENT-GUIDE.en.md) ｜ [中文](./docs/AGENT-GUIDE.md) | the assistant | full manual, shipped with the plugin, **no install needed** |
+| [`skills/session-orchestrator/`](./skills/session-orchestrator/SKILL.md) | the assistant | condensed operating version, **install only with your consent** |
+
+**The cheapest way to make the assistant get this right** is not the skill — just tell it:
+
+> When using the session orchestrator plugin, read `docs/AGENT-GUIDE.en.md` first.
+
+That is usually enough. The skill suits daily use where you want fewer questions; the manual suits one-off work where details matter.
+
 Installing this gives your sessions four capabilities: **start new sessions, jump between them, write letters to each other, and `@`-mention people**.
 
 In one line: **spin up a new workspace in a sentence, have your agent jump to any session, and let agents talk across sessions (and across workspaces) through a mailbox.**
@@ -242,6 +256,28 @@ Refresh the page afterwards; if `session-orchestrator` shows up in the skill lis
 **Not required**, and **the assistant will not install it on its own**. If it thinks the detailed guide would help, it asks you first; only then does it install.
 
 If your assistant is already accurate, skip this section.
+
+### Simpler: point the assistant at the guide
+
+If all you want is for the assistant to get this right, **you do not need the skill at all**. Just tell it:
+
+> When using the session orchestrator plugin, read `docs/AGENT-GUIDE.en.md` first.
+
+Or hand it the link:
+
+- English: [Agent Guide](./docs/AGENT-GUIDE.en.md)
+- 中文：[Agent 手册](./docs/AGENT-GUIDE.md)
+
+Those are the plugin's full manuals (install, parameters, state flow, rejection codes, every config key).
+The skill is a condensed operating version for repeated use; the manual suits one-off work where details matter.
+
+### How the three fit together
+
+| Thing | Audience | Contents |
+|---|---|---|
+| The README you are reading | humans | what it does, how to install, how to use |
+| [`docs/AGENT-GUIDE.en.md`](./docs/AGENT-GUIDE.en.md) | the assistant | full manual, shipped with the plugin |
+| `skills/session-orchestrator/` | the assistant | condensed operating version, install only with your consent |
 
 ## Use your own wording
 

@@ -4,6 +4,20 @@
 >
 > If you are an agent, skip this file → [Agent Guide (English)](./docs/AGENT-GUIDE.en.md) ｜ [Agent 手册（中文）](./docs/AGENT-GUIDE.md)
 
+这份文档是**给人看的**。插件同时附带两份面向助手的说明书：
+
+| 文档 | 给谁 | 什么时候用 |
+|---|---|---|
+| **本 README** | 人 | 想知道能做什么、怎么装、怎么用 |
+| [**Agent 手册**](./docs/AGENT-GUIDE.md) ｜ [English](./docs/AGENT-GUIDE.en.md) | 助手 | 完整说明书，随插件发布，**不用装** |
+| [`skills/session-orchestrator/`](./skills/session-orchestrator/SKILL.md) | 助手 | 精简操作版，**需你同意才装** |
+
+**想让助手把这件事做对**，最省事的办法不是装 skill，而是跟他说一句：
+
+> 用会话编排插件的时候，先读 `docs/AGENT-GUIDE.md`
+
+他读完就够了。skill 适合天天用、想少问几个问题；读手册适合一次性的、想搞清楚细节的场合。
+
 装上之后，你的会话多出四种能力：**开新会话、在会话间跳转、互相写信、@ 一下找人**。
 
 一句话说清它替你做什么：**一句话拉起新工作区，让 agent 帮你跳到任意会话，让 agent 跨会话（或跨工作区）通过信箱机制互相通信。**
@@ -242,6 +256,28 @@ skill 直接把边界写死：本插件只负责**登记 DSH 工作区并开会�
 **不强制安装**，而且**助手不会自己装**。如果它觉得需要更详细的说明，会先问你；你同意了才装。
 
 觉得助手已经够准的，跳过这一节即可。
+
+### 更简单的做法：让他直接读手册
+
+如果你只是想让助手把这件事做对，**不用装 skill 也行**，跟他说一句：
+
+> 用会话编排插件的时候，先读 `docs/AGENT-GUIDE.md`
+
+或者把链接发给他：
+
+- 中文：[Agent 手册](./docs/AGENT-GUIDE.md)
+- English: [Agent Guide](./docs/AGENT-GUIDE.en.md)
+
+这两份是插件自带的完整说明书（安装、参数、状态流转、拒绝码、全部配置项）。
+skill 是它的精简操作版，适合反复使用；读手册适合一次性的、想搞清楚细节的场合。
+
+### 三者的关系
+
+| 东西 | 给谁 | 内容 |
+|---|---|---|
+| 你正在读的这份 README | 人 | 能做什么、怎么装、怎么用 |
+| [`docs/AGENT-GUIDE.md`](./docs/AGENT-GUIDE.md) | 助手 | 完整说明书，随插件发布 |
+| `skills/session-orchestrator/` | 助手 | 精简操作版，需你同意才装 |
 
 ## 用你自己的说法
 
