@@ -6,14 +6,14 @@
   "type": "architecture",
   "quality": "showcase",
   "specification": {
-    "path": "D:\\dshdata\\本地\\.archify\\architecture-session-mailbox-20261117-1455\\candidate.json",
-    "sha256": "99c133587941b182e8b7a340dc29718be0e6aa17131a066ea46344c1e95200fa",
-    "bytes": 7550
+    "path": "D:\\dshdata\\本地\\.archify\\architecture-session-bridge-v031-20261119-155501\\candidate.json",
+    "sha256": "6b2589ed067048e79078a15bce9c106ea6e7d27532c501443dac6f4aa4a56a00",
+    "bytes": 9044
   },
   "artifact": {
-    "path": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.html",
-    "sha256": "3f968d4c7daa2b64b1638464162795a23fc7b58c15bcd771301b382e0e86f7b0",
-    "bytes": 769201
+    "path": "D:\\dshdata\\本地\\.archify\\architecture-session-bridge-v031-20261119-155501\\session-bridge-v031.html",
+    "sha256": "b3acaa96cb6e95efef1043ddb451e1aebc0c2b4051f4f9eb0604497bfcd60bb2",
+    "bytes": 786581
   },
   "gates": {
     "validate": "pass",
@@ -28,9 +28,9 @@
     "truncated": false
   },
   "evidence": {
-    "receipt": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.finalize.json",
-    "summaryReceipt": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.finalize-summary.json",
-    "browserCheckReceipt": "D:\\dshdata\\本地\\dsh-session-orchestrator\\docs\\architecture.browser-check.json"
+    "receipt": "D:\\dshdata\\本地\\.archify\\architecture-session-bridge-v031-20261119-155501\\session-bridge-v031.finalize.json",
+    "summaryReceipt": "D:\\dshdata\\本地\\.archify\\architecture-session-bridge-v031-20261119-155501\\session-bridge-v031.finalize-summary.json",
+    "browserCheckReceipt": "D:\\dshdata\\本地\\.archify\\architecture-session-bridge-v031-20261119-155501\\session-bridge-v031.browser-check.json"
   },
   "update": {
     "status": "update_available",
@@ -38,12 +38,370 @@
     "availableVersion": "3.2.0",
     "releaseNotes": "https://github.com/tt-a1i/archify/releases/tag/v3.2.0",
     "severity": "normal",
-    "checkedAt": "2026-11-17T06:57:47.760Z",
+    "checkedAt": "2026-11-19T07:55:24.636Z",
     "source": "cache",
     "noticeRequired": true,
-    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-17T06:57:47.760Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
+    "noticeText": "Archify update: 3.0.1 → 3.2.0. A previous check at 2026-11-19T07:55:24.636Z found a newer release. Release notes: https://github.com/tt-a1i/archify/releases/tag/v3.2.0. The installed Skill has not changed; ask to snooze or ignore this reminder.",
     "eventKey": "archify@sha256:70e210265c59f24dcbdf2a502ff671104b5454e7ee7d3554aecd86bad32384f5"
   },
   "visualReview": "not-requested",
-  "durationMs": 6667
+  "durationMs": 5470,
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "resolvedCrossovers": 15,
+      "routesOverSuggestedBends": 8,
+      "routesOverSuggestedStretch": 4
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [
+        {
+          "left": {
+            "id": "ext-queue",
+            "from": "external",
+            "to": "queue",
+            "label": "写 / 读",
+            "collectionIndex": 0,
+            "artifactIndex": 1
+          },
+          "right": {
+            "id": "browser-routes",
+            "from": "browser",
+            "to": "routes",
+            "label": "同源请求",
+            "collectionIndex": 8,
+            "artifactIndex": 9
+          },
+          "point": [
+            256,
+            355
+          ]
+        },
+        {
+          "left": {
+            "id": "queue-dispatcher",
+            "from": "queue",
+            "to": "dispatcher",
+            "label": "认领",
+            "collectionIndex": 1,
+            "artifactIndex": 2
+          },
+          "right": {
+            "id": "browser-jumps",
+            "from": "browser",
+            "to": "jumps",
+            "label": "消费即毁",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "point": [
+            433,
+            355
+          ]
+        },
+        {
+          "left": {
+            "id": "queue-dispatcher",
+            "from": "queue",
+            "to": "dispatcher",
+            "label": "认领",
+            "collectionIndex": 1,
+            "artifactIndex": 2
+          },
+          "right": {
+            "id": "commands-permit",
+            "from": "commands",
+            "to": "permit",
+            "label": "发授权",
+            "collectionIndex": 15,
+            "artifactIndex": 16
+          },
+          "point": [
+            506,
+            355
+          ]
+        },
+        {
+          "left": {
+            "id": "dispatcher-mailbox",
+            "from": "dispatcher",
+            "to": "mailbox",
+            "label": "14 个工具",
+            "collectionIndex": 2,
+            "artifactIndex": 3
+          },
+          "right": {
+            "id": "dispatcher-friends",
+            "from": "dispatcher",
+            "to": "friends",
+            "label": "注册 / 解析",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "point": [
+            758,
+            296
+          ],
+          "sharedNode": "dispatcher"
+        },
+        {
+          "left": {
+            "id": "dispatcher-mailbox",
+            "from": "dispatcher",
+            "to": "mailbox",
+            "label": "14 个工具",
+            "collectionIndex": 2,
+            "artifactIndex": 3
+          },
+          "right": {
+            "id": "seed-permit",
+            "from": "seed",
+            "to": "permit",
+            "label": "发授权",
+            "collectionIndex": 14,
+            "artifactIndex": 15
+          },
+          "point": [
+            787.0000000000001,
+            296
+          ]
+        },
+        {
+          "left": {
+            "id": "mailbox-box",
+            "from": "mailbox",
+            "to": "box",
+            "label": "落盘留痕",
+            "collectionIndex": 3,
+            "artifactIndex": 4
+          },
+          "right": {
+            "id": "dispatcher-friends",
+            "from": "dispatcher",
+            "to": "friends",
+            "label": "注册 / 解析",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "point": [
+            997.5000000000001,
+            253
+          ]
+        },
+        {
+          "left": {
+            "id": "mailbox-target",
+            "from": "mailbox",
+            "to": "target",
+            "label": "只推索引",
+            "collectionIndex": 4,
+            "artifactIndex": 5
+          },
+          "right": {
+            "id": "dispatcher-friends",
+            "from": "dispatcher",
+            "to": "friends",
+            "label": "注册 / 解析",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "point": [
+            867.5,
+            253
+          ]
+        },
+        {
+          "left": {
+            "id": "dispatcher-friends",
+            "from": "dispatcher",
+            "to": "friends",
+            "label": "注册 / 解析",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "right": {
+            "id": "seed-permit",
+            "from": "seed",
+            "to": "permit",
+            "label": "发授权",
+            "collectionIndex": 14,
+            "artifactIndex": 15
+          },
+          "point": [
+            787,
+            253
+          ]
+        }
+      ],
+      "detours": [
+        {
+          "relationship": {
+            "id": "dispatcher-friends",
+            "from": "dispatcher",
+            "to": "friends",
+            "label": "注册 / 解析",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "bends": 4,
+          "stretch": 1.464,
+          "directCorridorBlockers": [
+            {
+              "id": "mailbox",
+              "label": "信箱引擎",
+              "box": [
+                790,
+                320,
+                155,
+                70
+              ]
+            }
+          ]
+        },
+        {
+          "relationship": {
+            "id": "browser-routes",
+            "from": "browser",
+            "to": "routes",
+            "label": "同源请求",
+            "collectionIndex": 8,
+            "artifactIndex": 9
+          },
+          "bends": 3,
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "id": "browser-jumps",
+            "from": "browser",
+            "to": "jumps",
+            "label": "消费即毁",
+            "collectionIndex": 9,
+            "artifactIndex": 10
+          },
+          "bends": 4,
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "id": "seed-dispatcher",
+            "from": "seed",
+            "to": "dispatcher",
+            "label": "追加流程提示",
+            "collectionIndex": 13,
+            "artifactIndex": 14
+          },
+          "bends": 4,
+          "stretch": 1.648,
+          "directCorridorBlockers": [
+            {
+              "id": "commands",
+              "label": "3 条斜杠命令",
+              "box": [
+                530,
+                150,
+                155,
+                70
+              ]
+            }
+          ]
+        },
+        {
+          "relationship": {
+            "id": "seed-permit",
+            "from": "seed",
+            "to": "permit",
+            "label": "发授权",
+            "collectionIndex": 14,
+            "artifactIndex": 15
+          },
+          "bends": 3,
+          "stretch": 1.458,
+          "directCorridorBlockers": [
+            {
+              "id": "dispatcher",
+              "label": "分发器",
+              "box": [
+                530,
+                320,
+                155,
+                70
+              ]
+            },
+            {
+              "id": "commands",
+              "label": "3 条斜杠命令",
+              "box": [
+                530,
+                150,
+                155,
+                70
+              ]
+            }
+          ]
+        },
+        {
+          "relationship": {
+            "id": "commands-permit",
+            "from": "commands",
+            "to": "permit",
+            "label": "发授权",
+            "collectionIndex": 15,
+            "artifactIndex": 16
+          },
+          "bends": 3,
+          "stretch": 1.151,
+          "directCorridorBlockers": [
+            {
+              "id": "dispatcher",
+              "label": "分发器",
+              "box": [
+                530,
+                320,
+                155,
+                70
+              ]
+            }
+          ]
+        },
+        {
+          "relationship": {
+            "id": "permit-dispatcher",
+            "from": "permit",
+            "to": "dispatcher",
+            "label": "放行",
+            "collectionIndex": 16,
+            "artifactIndex": 17
+          },
+          "bends": 3,
+          "stretch": 1.311
+        },
+        {
+          "relationship": {
+            "id": "dispatcher-hostsvc",
+            "from": "dispatcher",
+            "to": "hostsvc",
+            "label": "建会话 / 投递",
+            "collectionIndex": 17,
+            "artifactIndex": 18
+          },
+          "bends": 4,
+          "stretch": 1.397
+        }
+      ],
+      "truncated": true
+    },
+    "hints": [
+      "external → queue crosses browser → routes: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "queue → dispatcher crosses browser → jumps: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "queue → dispatcher crosses commands → permit: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "dispatcher → mailbox and dispatcher → friends cross next to dispatcher: move node mailbox or friends so the two reach dispatcher from different sides (for example one level with it, one directly above or below it).",
+      "dispatcher → mailbox crosses seed → permit: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "mailbox → box crosses dispatcher → friends: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "mailbox → target crosses dispatcher → friends: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "dispatcher → friends crosses seed → permit: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
 }
