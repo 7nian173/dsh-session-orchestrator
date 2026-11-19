@@ -247,6 +247,32 @@ You do **not** have to use exactly that. "deliver it to him", "give them a heads
 
 Where it lives: `$DSH_HOME/session-bridge/agent-prefs.json` — plugin-level preference, never written into a workspace.
 
+## Asking for a workspace explicitly
+
+Natural language can be misread, so **say it plainly when you can**. These two phrasings are recognised precisely:
+
+```
+帮我建立个新的工作区
+帮我建立个 dsh 工作区
+```
+
+The plugin matches these (the word 工作区 must appear), and the assistant then asks only: **where the directory goes, and what the project is called**.
+
+### Or just use the command
+
+```
+/new-workspace my-project
+/new-workspace my-project D:\work\myproj
+```
+
+No directory means it asks; no project name means it prompts. Paths with spaces are parsed as one argument.
+
+**The command and the phrasing are two equivalent routes** to the same action: register a DSH workspace and open one session. There is no third interpretation.
+
+### What it does not do
+
+This plugin **only registers a workspace and opens a session**; it does not scaffold a project. So it will never ask "Node or Python?" or "README/AGENTS.md?" — those are ordinary file work, outside this plugin.
+
 ## Settings
 
 Configure the plugin under **DSH Settings → Session Orchestration**. The page has three sections: Mailbox / Safety / Advanced, each with its explanation inline.

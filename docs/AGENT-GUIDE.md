@@ -106,7 +106,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 | 种子 | 常见说法 | 你该走 |
 |---|---|---|
-| `init-workspace` | 「帮我建个工作区」「开个新项目」「新建一个工作空间」 | 先问清目录 / 项目名 / 预设，再 `session_init_workspace` |
+| `init-workspace` | 「帮我建立个新的工作区」「帮我建立个 dsh 工作区」 | 先问清目录 / 项目名，再 `session_init_workspace` |
 | `register-friend` | 「帮我注册个」「把你注册个」「注册成 xx」「给他登记个名字」 | 分清注册自己还是别人，再 `session_register_name` 或 `/register-peer` |
 | `send-letter` | 「给 xx 发个信息」「通知一下对方」 | 确认收件人 → 必要时先注册 → `mail_send` |
 | `any-session` | 「跳到那个会话」「打开 xx 会话」 | 目标不明确先给候选，再 `session_jump` |
@@ -137,6 +137,10 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | 显示「这个目录归 DSH 管，并开个会话」 | ✅ 用 `session_init_workspace` |
 
 拿不准时**问一句「是要登记成 DSH 工作区并开会话，还是整理目录结构？」**，一个问题就够，别列三四种方案让人选。
+
+**匹配很窄**：必须出现「工作区/工作空间」且动词紧邻。「建个项目」「整理目录」「建 git 仓库」**不触发**——按普通对话处理，别硬往本插件上靠。
+
+**斜杠命令 `/new-workspace 项目名 [目录]`** 是等价的另一条入口：它会直接把解析好的项目和目录交给你，并为你发好建会话授权。
 
 **种子的意义只是提醒你别漏流程**。信息不全时要主动问（用 `ask_user_question` 一次问完），不要因为拿到种子就硬着头皮建。
 
