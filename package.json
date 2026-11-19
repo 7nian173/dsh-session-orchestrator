@@ -1,7 +1,7 @@
 {
   "name": "dsh-session-orchestrator",
   "version": "0.3.0",
-  "description": "Session orchestration for DeepSeek Harness: a workspace mailbox with automatic receipts and expiry, session creation and hand-off, cross-session delivery, one-shot UI navigation, session groups, and an in-app settings page. Host half plus browser half. Agents: read docs/AGENT-GUIDE.md before using the mail tools.",
+  "description": "Session orchestration for DeepSeek Harness: create and hand off sessions, jump between them, write letters with receipts through a workspace mailbox, form session groups, and manage all of it from a settings page. Host half plus browser half.",
   "type": "module",
   "main": "lib/index.js",
   "files": [
@@ -11,6 +11,7 @@
     "cordis.patch.yml",
     "README.md",
     "docs/AGENT-GUIDE.md",
+    "docs/AGENT-GUIDE.en.md",
     "LICENSE",
     "README.en.md",
     "docs/architecture.html",
@@ -39,7 +40,7 @@
         "@deepseek-ai/dsh-client-ui-conversation"
       ]
     },
-    "agentGuide": "docs/AGENT-GUIDE.md"
+    "agentGuide": "docs/AGENT-GUIDE.en.md"
   },
   "repository": {
     "type": "git",
