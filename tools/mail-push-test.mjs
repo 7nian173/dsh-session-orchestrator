@@ -896,5 +896,53 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 }
 
+// ── 回归：已送达的信二次进轮，不能重算 deadline（否则回执窗口可被无限后推）──
+// 实测 M-0037：sentAt+300s 该超时，但 deadline 被推到 sentAt+837s；
+// 因为 noteStep 每被调用一次就 `deadline = deliveredAt + windowMs`，
+// 而持有卡反复投递会让它反复进来 —— 对方于是永远等不到超时。
+{
+  const dlBox = createMailbox({
+    ackTimeoutMs: 5000,
+    cwdOf: async () => join(tmp, 'dl'),
+    cwds: async () => [join(tmp, 'dl')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const DID = 'M-20261119-8102'
+  await dlBox.send({
+    owner: 'D1', peer: 'D2', type: 'S-PROGRESS', body: 'deadline',
+    senderSessionId: 'SD1', peerSessionId: 'SD2', mailId: DID,
+  })
+  const dlLetters = join(tmp, 'dl', '.dsh-mail', '_letters.json')
+  const dBefore = await readJson(dlLetters)
+  const dTarget = (dBefore.letters || []).find((e) => e.id === DID)
+  const markerDeliveredAt = '2026-11-19T13:00:00.000Z'
+  const markerDeadline = Date.now() + 5000
+  if (dTarget) {
+    dTarget.status = 'delivered'
+    dTarget.deliveredAt = markerDeliveredAt
+    dTarget.deadline = markerDeadline
+    await writeFile(dlLetters, JSON.stringify(dBefore, null, 2), 'utf8')
+  }
+  const dlBox2 = createMailbox({
+    ackTimeoutMs: 5000,
+    cwdOf: async () => join(tmp, 'dl'),
+    cwds: async () => [join(tmp, 'dl')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  // 持有卡二次投递：标记再进一轮
+  await dlBox2.noteStep({ id: 'SD2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + DID + '〕' }] }])
+  const dAfter = await readJson(dlLetters)
+  const dNow = (dAfter.letters || []).find((e) => e.id === DID)
+  check(
+    '已送达的信二次进轮不重算 deadline',
+    dNow && dNow.deliveredAt === markerDeliveredAt && dNow.deadline === markerDeadline,
+    JSON.stringify({ deliveredAt: dNow && dNow.deliveredAt, deadline: dNow && dNow.deadline, expectedDeadline: markerDeadline }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
