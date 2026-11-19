@@ -144,6 +144,15 @@ Two commands, two different jobs:
 /register-peer Super-agent session-42635e1a-0089-425f-9441-7c9b1ffc8431 决策
 ```
 
+**Which sessions it can see depends on the cross-workspace switch**:
+
+| Switch | Whom `/register-peer` can register |
+|---|---|
+| **Off** (default) | Only sessions in **this workspace** (subdirectories included) |
+| **On** | Sessions in every workspace |
+
+This is the **same switch** that decides whether you may send letters to another workspace, so you never end up able to register a peer you cannot write to.
+
 `/register-peer` **has no fixed format** — give whatever you have:
 
 ```

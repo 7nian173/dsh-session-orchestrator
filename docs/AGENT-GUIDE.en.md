@@ -382,7 +382,7 @@ Change these in **DSH Settings → Session Orchestration** (auto-saved, recompos
 | `allowAgentCreateSession` | `false` | Let the agent create sessions **on its own initiative**. **Off by default**. When off: an explicit human request for a workspace/session is allowed; you deciding to open one returns `AGENT_CREATE_DISABLED` — use DSH native subagents instead |
 | `askPresetOnCreate` | `false` | Require listing presets for a human to choose before creating. Off means an omitted preset falls back to the DSH default |
 | `guardedPaths` | `[]` | Extra forbidden absolute paths; **append only**, built-in protection cannot be removed |
-| `allowCrossWorkspace` | `false` | Allow letters into unrelated workspaces |
+| `allowCrossWorkspace` | `false` | Allow letters into unrelated workspaces **and allow registering sessions there**. When off, `/register-peer` candidates cover this workspace only |
 
 ### Queue and tool surface
 

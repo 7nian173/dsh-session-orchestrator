@@ -387,7 +387,7 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 | `allowAgentCreateSession` | `false` | 允许 agent **自主**新建会话。**默认关**。关闭时：人类亲口提出建会话 → 放行；你自己想开一个 → `AGENT_CREATE_DISABLED`，请改用 DSH 原生子代理 |
 | `askPresetOnCreate` | `false` | 新建时必须先列预设让人挑。关闭时未指定预设交给 DSH 默认 |
 | `guardedPaths` | `[]` | 额外禁区（绝对路径数组），**只能追加**，不能删掉内置保护 |
-| `allowCrossWorkspace` | `false` | 允许跨到无关工作区发信 |
+| `allowCrossWorkspace` | `false` | 允许跨到无关工作区**发信、也允许注册那里的会话**。关着时 `/register-peer` 的候选只含本工作区 |
 
 ### 队列与工具面
 
