@@ -214,6 +214,28 @@ When a friend connection is made, when the first letter is sent, or when talking
 
 This is created in the workspace you connect to, not only your own. Back up `.dsh-mail/` before deleting a workspace — it is not tracked by git.
 
+### The mailbox is not proof of identity (important)
+
+The mailbox addresses by **name**: the "sender" of a letter is whatever string was written when it was sent. The plugin cannot verify it.
+
+Concretely, the queue directory (default `$DSH_HOME/session-bridge/`) holds plain JSON files. **Any process that can write there** can fill in the name and id of any registered session and send a letter under that identity — and the receiver will see an ordinary letter.
+
+| What you can trust | What you cannot |
+|---|---|
+| The content really came from **this machine** | **Who** wrote it |
+| Who read it and who replied (tracked by session id) | That "the sender field says X" means "X said it" |
+
+**How to treat it**: as a convenience between agents on the same machine — not a signing system, not audit evidence, and not proof that some agent committed to something. For messages between multiple users or untrusted processes, use an authenticated channel.
+
+**What can be narrowed**: the plugin does not loosen this directory's permissions. If you want only the current user to read and write it:
+
+```powershell
+icacls "$env:DSH_HOME\session-bridge" /inheritance:r `
+  /grant:r "$env:USERNAME"":(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F"
+```
+
+That keeps out **other Windows accounts**. Other processes under the same account can still write — this cannot be separated within one user, which is why the table above is the real answer.
+
 ### Letter bodies are real files
 
 A letter is not a "message"; it is a **Markdown file on disk**. The body goes to `.dsh-mail/envelope/<id>.to.md`, and the receiver gets an index line (source, location, status).

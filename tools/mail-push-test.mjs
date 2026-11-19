@@ -67,14 +67,17 @@ check('留痕有事件', (led.events || []).length >= 1, JSON.stringify((led.eve
 // 送达（pre-step 观测到回执标记）→ 路径要出现 R
 await box.noteStep({ id: 'session-to' }, [{ content: [{ type: 'text', text: '〔信箱·' + id + '〕收到了' }] }])
 const idxDel = await readJson(join(wsTo, '.dsh-mail', '_index.json'))
-check('送达后收信方仍是 P（未表态）', idxDel[id]?.sides?.to?.path === 'P', idxDel[id]?.sides?.to?.path)
+// 索引两侧对称：送达后双方路径都出现 R（已送达）。
+// 之前收信侧留 P，导致同一封信两个视角路径长度不同（A>R>D vs P>D），
+// 看索引的人会以为两封信走了不同流程。「送达 ≠ 已读 ≠ 已回」由 readState 表达。
+check('送达后收信方也记 R（索引两侧对称）', idxDel[id]?.sides?.to?.path === 'P>R', idxDel[id]?.sides?.to?.path)
 const idxFromDel = await readJson(join(wsFrom, '.dsh-mail', '_index.json'))
 check('送达后发信方 A>R', idxFromDel[id]?.sides?.from?.path === 'A>R', idxFromDel[id]?.sides?.from?.path)
 
 await box.ack({ mailId: id, close: true })
 const idxTo2 = await readJson(join(wsTo, '.dsh-mail', '_index.json'))
 const idxFrom2 = await readJson(join(wsFrom, '.dsh-mail', '_index.json'))
-check('结案后收信方 P>D', idxTo2[id]?.sides?.to?.path === 'P>D', idxTo2[id]?.sides?.to?.path)
+check('结案后收信方 P>R>D', idxTo2[id]?.sides?.to?.path === 'P>R>D', idxTo2[id]?.sides?.to?.path)
 check('发信方路径 A>R>D', idxFrom2[id]?.sides?.from?.path === 'A>R>D', idxFrom2[id]?.sides?.from?.path)
 
 const wsGhost = join(tmp, 'ws-ghost')
@@ -695,6 +698,68 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
     sweep2.repaired >= 1 && pPersisted && typeof pPersisted.deadline === 'number' && Number.isFinite(pPersisted.deadline),
     JSON.stringify({ persisted: pPersisted && pPersisted.deadline, repaired: sweep2.repaired }),
   )
+}
+
+// ── 回归：已送达（delivered）的信不能被背压软释放 ──
+// delivered 表示信已经进了对方上下文、对方可能读过 —— 那是对方的债。
+// 旧逻辑把它也当「在途」，等满 backpressureReleaseMs 就放行，
+// 等于「读过没回就能再发下一封」（实验室指出）。
+{
+  const bpBox = createMailbox({
+    ackTimeoutMs: 600000,
+    backpressureReleaseMs: 50, // 50ms 就能触发软释放，把窗口压到最短
+    cwdOf: async () => join(tmp, 'bp'),
+    cwds: async () => [join(tmp, 'bp')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const BP1 = 'M-20261119-7901'
+  const first = await bpBox.send({
+    owner: 'B1', peer: 'B2', type: 'S-PROGRESS', body: 'first',
+    senderSessionId: 'SB1', peerSessionId: 'SB2', mailId: BP1,
+  })
+  check('背压：第一封发出', first.ok === true, JSON.stringify(first.error || first.mailId))
+  // 让它进入 delivered（模拟对方已收下）
+  await bpBox.noteStep({ id: 'SB2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + BP1 + '〕' }] }])
+  await new Promise((r) => setTimeout(r, 120)) // 超过 backpressureReleaseMs
+  const second = await bpBox.send({
+    owner: 'B1', peer: 'B2', type: 'S-PROGRESS', body: 'second',
+    senderSessionId: 'SB1', peerSessionId: 'SB2',
+  })
+  check(
+    '已送达的信挡住下一封（不软释放）',
+    second.ok === false && second.error && second.error.code === 'PAIR_OUTSTANDING',
+    JSON.stringify({ ok: second.ok, code: second.error && second.error.code, msg: (second.error && second.error.message || '').slice(-40) }),
+  )
+}
+
+// ── 回归：索引两侧的 delivered 字母必须一致 ──
+// `_index.json` 是给人看的。之前 delivered 在发信侧是 R、收信侧是 P，
+// 同一封信两个视角路径长度不同，看索引的人会以为走了不同流程。
+{
+  const symBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async (sid) => (sid === 'SY1' ? join(tmp, 'sym-from') : sid === 'SY2' ? join(tmp, 'sym-to') : undefined),
+    cwds: async () => [join(tmp, 'sym-from'), join(tmp, 'sym-to')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await ensureWorkspaceBox(join(tmp, 'sym-from'))
+  await ensureWorkspaceBox(join(tmp, 'sym-to'))
+  const SYM = 'M-20261119-7902'
+  await symBox.send({
+    owner: 'S1', peer: 'S2', type: 'S-PROGRESS', body: 'sym',
+    senderSessionId: 'SY1', peerSessionId: 'SY2', mailId: SYM,
+  })
+  // 推进到 delivered
+  await symBox.noteStep({ id: 'SY2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + SYM + '〕' }] }])
+  const fromIdx = await readJson(join(tmp, 'sym-from', '.dsh-mail', '_index.json'))
+  const toIdx = await readJson(join(tmp, 'sym-to', '.dsh-mail', '_index.json'))
+  const fromCode = fromIdx[SYM]?.sides?.from?.code
+  const toCode = toIdx[SYM]?.sides?.to?.code
+  check('索引两侧 delivered 字母对称', fromCode === toCode && fromCode === 'R', JSON.stringify({ from: fromCode, to: toCode }))
 }
 
 console.log(lines.join('\n'))
