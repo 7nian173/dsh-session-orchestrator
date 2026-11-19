@@ -73,6 +73,21 @@ Not available on desktop — the `desktop` profile is owned by Electron.
 
 ---
 
+## 2.5 Natural-language seeds (a doorway, not the work)
+
+Humans will not learn command syntax just to create a workspace. When they **speak plainly**, the plugin appends a hint to the context at the first step of the turn telling you which flow to take.
+
+Matching is loose, but it never intercepts or rewrites the human message, and never does the work for you. When you see a block starting with `〔信箱·种子〕`:
+
+| Seed | Typical phrasing | What to run |
+|---|---|---|
+| `init-workspace` | "make me a workspace", "start a new project" | Ask for directory / project name / preset, then `session_init_workspace` |
+| `register-friend` | "register me", "register yourself", "register it as X" | Decide self vs peer, then `session_register_name` or `/register-peer` |
+| `send-letter` | "send X a message", "let them know" | Confirm the recipient → register if needed → `mail_send` |
+| `any-session` | "jump to that session", "open the X session" | Offer candidates when ambiguous, then `session_jump` |
+
+**A seed only reminds you not to skip a step.** When information is missing, ask (`ask_user_question`, all at once); do not barrel ahead just because a seed fired.
+
 ## 3. Three hard rules
 
 ### A reply is not an acknowledgement
