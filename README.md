@@ -152,7 +152,7 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 另外三个常量级的护栏：拒绝盘符根/层级过浅、拒绝用户主目录、拒绝系统目录与应用安装目录；每次删除都写 `deleted-workspaces.jsonl` 留痕。
 
-`init_workspace` 只允许在 `DSH_HOME` 或用户主目录之下建目录；`probe_workspace_stream` 的探针目录固定在队列根内，忽略外部传入的 `probeDir`。
+`init_workspace` 用**黑名单**拦：拒绝盘符根、系统目录、`DSH_HOME` 本身，**不限定盘符**（真实项目分散在 `E:` / `F:` / `D:\文档`，白名单会误杀）。`probe_workspace_stream` 的探针目录固定在队列根内，忽略外部传入的 `probeDir`。
 
 ### 浏览器 HTTP 路由
 
