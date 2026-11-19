@@ -435,5 +435,26 @@ check('isSafeMailId 边界正确', isSafeMailId('M-20261119-0001') === true && i
 const okId = await guardBox.send({ owner: 'a', peer: 'b', type: 'S-PROGRESS', body: 'x', senderSessionId: 'S90', peerSessionId: 'S91', mailId: 'M-20261119-9999' })
 check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-20261119-9999', JSON.stringify(okId.error))
 
+// ── 回归：noteStep 不能把已 done 的信当成首次送达（实验室 2026-11-19 实测脏数据）──
+{
+  const regBox = createMailbox({ ackTimeoutMs: 60000, cwdOf: async () => 'C:\\reg', isArchived: async () => false, log: () => {}, service: () => undefined })
+  const sent = await regBox.send({ owner: 'R1', peer: 'R2', type: 'S-PROGRESS', body: 'reg', senderSessionId: 'SR1', peerSessionId: 'SR2', mailId: 'M-20261119-8801' })
+  // 先正常送达一次
+  await regBox.noteStep({ id: 'SR2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261119-8801〕' }] }])
+  // 结案
+  await regBox.ack({ mailId: 'M-20261119-8801', close: true })
+  const beforeDone = await regBox.status({ mailId: 'M-20261119-8801' })
+  const d1 = beforeDone.rows[0] && beforeDone.rows[0].deliveredAt
+  // 再来一次「回执标记进上下文」——不该改动任何东西
+  await regBox.noteStep({ id: 'SR2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261119-8801〕' }] }])
+  const afterDone = await regBox.status({ mailId: 'M-20261119-8801' })
+  const row = afterDone.rows[0] || {}
+  check(
+    '已 done 的信不会被二次送达污染',
+    row.status === 'done' && row.toPath && row.readState === 'acknowledged',
+    JSON.stringify({ status: row.status, readState: row.readState, path: row.toPath }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
