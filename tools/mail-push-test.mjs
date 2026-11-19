@@ -129,7 +129,7 @@ check('撤销信放行（背压豁免）', exp.ok === true && exp.status !== 'bl
 await sleep(80)
 const origNow = await chBox.status({ mailId: 'M-20261118-9001' })
 check('原信转 expired（E）', origNow.rows[0] && origNow.rows[0].status === 'expired', JSON.stringify(origNow.rows[0] && origNow.rows[0].toPath))
-check('过期信落到「已过期」目录而不是「已解决」', origNow.rows[0] && origNow.rows[0].toDir === '已过期' && origNow.rows[0].fromDir === '已过期', JSON.stringify({ to: origNow.rows[0] && origNow.rows[0].toDir, from: origNow.rows[0] && origNow.rows[0].fromDir }))
+check('过期信落到 Expired 目录而不是 Resolved', origNow.rows[0] && origNow.rows[0].toDir === 'Expired' && origNow.rows[0].fromDir === 'Expired', JSON.stringify({ to: origNow.rows[0] && origNow.rows[0].toDir, from: origNow.rows[0] && origNow.rows[0].fromDir }))
 const expCalls = chCalls.slice(expireCalls).filter((call) => /〔信箱·/.test(call.text))
 check('加急件绕过忙状态投出去', expCalls.length >= 1, JSON.stringify(expCalls.map((c) => c.text.slice(0, 18))))
 const dupExp = await chBox.send(chMail('W', 'V', 'S30', 'S31', 'M-20261118-9003', 'S-EXPIRE', { expireOf: 'M-20261118-9001', reason: '重复撤销' }))
@@ -176,7 +176,7 @@ check('目标忙 → 不投卡，先入通道', chHeld1.push.queued === false &&
 check('忙时不产生提醒卡', chCalls.every((call) => !/〔信箱·M-20261117-801[12]〕/.test(call.text)), JSON.stringify(chCalls.map((call) => call.id)))
 await sleep(120)
 const envCh = await readFile(join(wsCh, '.dsh-mail', 'envelope', 'M-20261117-8011.to.md'), 'utf8')
-check('忙太久 → 待办信封 paused: true', /^status: 待办$/m.test(envCh) && /^paused: true$/m.test(envCh), envCh.split('\n').slice(0, 12).join(' | '))
+check('忙太久 → 待办信封 paused: true', /^status: Todo$/m.test(envCh) && /^paused: true$/m.test(envCh), envCh.split('\n').slice(0, 12).join(' | '))
 const cj = await readJson(join(wsCh, '.dsh-mail', '_courier.json'))
 check('持有队列落盘', Array.isArray(cj.items) && cj.items.some((item) => item.mailId === 'M-20261117-8011' && item.state === 'held'), JSON.stringify(cj.items.map((item) => [item.mailId, item.state])))
 
