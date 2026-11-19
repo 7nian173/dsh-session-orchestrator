@@ -73,6 +73,31 @@ Not available on desktop — the `desktop` profile is owned by Electron.
 
 ---
 
+## 2.4 After you finish, teach the human how to continue
+
+When a registration or workspace creation completes, **do not just say "done"**. Teach them how to phrase the next request — they should never have to memorise command syntax.
+
+The receipt already carries this wording; reuse it:
+
+```
+┌ From here you can simply tell me:
+│ "send <what you want to say> to <registered name>" — I deliver the letter
+│ "what is waiting for me" — I list it
+│ Or use your own wording: say it once and I will remember it.
+```
+
+**That last line is the point.** Human phrasings vary wildly ("deliver it to him", "give them a heads-up", "pass this along"). When you hear a new one, record it:
+
+```
+queue action prefs_set { phrasing: "<their exact words>", means: "<what to do>" }
+—— written to $DSH_HOME/session-bridge/agent-prefs.json
+queue action prefs_get → read back every recorded phrasing
+```
+
+This lives at **plugin level** (under the queue root), never inside a workspace. The same phrasing overwrites its entry; at most 50 are kept.
+
+At the start of a turn, `prefs_get` once — if the human uses phrasing you have recorded, just do it instead of asking again.
+
 ## 2.5 Natural-language seeds (a doorway, not the work)
 
 Humans will not learn command syntax just to create a workspace. When they **speak plainly**, the plugin appends a hint to the context at the first step of the turn telling you which flow to take.
