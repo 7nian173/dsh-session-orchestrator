@@ -124,6 +124,25 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 | `staleAfterMs` | `1800000` | 信封静置超过这么久，允许补一次催收 |
 | `digestGapMs` | `600000` | 发信方摘要数字没变时的最小重发间隔 |
 
+## 配置
+
+所有键都在插件 Config schema 里，可在 DSH 插件面板改，也可写进 `cordis.patch.yml`。
+改完需要重新加载插件（disable → enable 或重启应用）。
+
+**通用性相关的键**（换机器/给别人用时要看的）：
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `toolTimeoutMs` | `60000` | 工具经文件队列等 dispatcher 的上限；慢机器/大工作区调大。以前写死 20 秒，别人一装就超时 |
+| `mailDirName` | `.dsh-mail` | 信箱目录名；换名后旧目录不会自动迁移 |
+| `guardedPaths` | `[]` | 额外禁区（绝对路径数组），在建目录与递归删除两处生效 |
+| `allowCrossWorkspace` | `false` | 跨工作区放行；以前这个键声明了却没被 `sanitize()` 保留，实际永远关着 |
+| `groupAutoThreshold` | `3` | 同一对角色往返多少封自动结群；以前参数没传下去，写死 3 |
+| `taskChannelIdleMs` | `600000` | 专用通道闲置多久退休；以前三处硬编码 |
+
+**受保护目录不写死盘符**：系统目录、程序目录、应用安装目录全部从 `SystemRoot` / `ProgramFiles` / `process.execPath` 等环境值现算；
+`DSH_HOME` 与用户主目录（`USERPROFILE` / `HOME` / `os.homedir()`）只保护自身，子目录放行——真实项目就在它们下面。
+
 ## 两条入口
 
 外部程序和 Agent 走的是同一套能力，入口不同。
