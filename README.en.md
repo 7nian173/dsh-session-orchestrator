@@ -40,7 +40,8 @@ That is usually enough. The skill suits daily use where you want fewer questions
 **Other**
 
 - [Bundled skill](#bundled-skill-optional-works-without-it) — optional; fewer questions with it
-- [Architecture diagram](./docs/architecture.html) — components and data flow (external file)
+- [Architecture diagram](./docs/architecture.html) — how one letter travels end to end
+- [Config and command chains](./docs/config-chains.md) — where settings come from, how commands arrive, 11 routes, 14 tools
 - [Version](#version) · [License](#license)
 
 ---

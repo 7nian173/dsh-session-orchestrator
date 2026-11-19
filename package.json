@@ -16,7 +16,7 @@
     "LICENSE",
     "README.en.md",
     "docs/architecture.html",
-    "docs/architecture.png",
+    "docs/config-chains.md",
     "tools/mail-push-test.mjs",
     "tools/mail-index-repair.mjs"
   ],
