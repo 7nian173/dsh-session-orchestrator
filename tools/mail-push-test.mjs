@@ -1156,5 +1156,58 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 }
 
+// ── 回归：stepBanner 与 mail_inbox 必须用同一套「未读」判据 ──
+// 实验室指出两处漂移：stepBanner 用取反 `!['acked','done','expired']`
+// （把 running 之类未知状态也算未读），inbox 用 LIVE_STATUS ∪ {blocked}。
+// 同一封信在两个入口显示不同数量，排查时无从判断哪个对。
+{
+  const ubWs = join(tmp, 'unread-parity')
+  await ensureWorkspaceBox(ubWs)
+  const ubBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => ubWs,
+    cwds: async () => [ubWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const ubIds = ['M-20261119-9301', 'M-20261119-9302', 'M-20261119-9303']
+  for (const id of ubIds) {
+    await ubBox.send({
+      owner: 'U' + id.slice(-1), peer: 'RU', type: 'S-PROGRESS', body: 'x',
+      senderSessionId: 'SU' + id.slice(-1), peerSessionId: 'RU', mailId: id,
+    })
+  }
+  // 把中间那封改成 LIVE_STATUS 之外、但旧判据会算成未读的状态
+  const ubPath = join(ubWs, '.dsh-mail', '_letters.json')
+  const ubRaw = await readJson(ubPath)
+  const ubMid = (ubRaw.letters || []).find((e) => e.id === ubIds[1])
+  if (ubMid) {
+    ubMid.status = 'running' // 历史未知状态：不该算未读
+    await writeFile(ubPath, JSON.stringify(ubRaw, null, 2), 'utf8')
+  }
+  const ubBox2 = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => ubWs,
+    cwds: async () => [ubWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const ubBanner = await ubBox2.stepBanner({ id: 'RU' })
+  const ubInbox = await ubBox2.inbox({ sessionId: 'RU' })
+  const bannerCount = (() => {
+    const m = String(ubBanner || '').match(/你名下 (\d+) 封未读/)
+    return m ? Number(m[1]) : 0
+  })()
+  // inbox() 返回的是 { rows, count, unread, ... }，不是 items/letters
+  const inboxCount = (ubInbox.rows || []).length
+  check(
+    'banner 与 inbox 的未读数一致',
+    bannerCount === inboxCount && bannerCount === 2,
+    JSON.stringify({ bannerCount, inboxCount, banner: String(ubBanner).slice(0, 60) }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
