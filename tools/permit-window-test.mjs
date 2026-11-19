@@ -26,8 +26,20 @@ if (!hasSchema) {
 }
 
 const result = spawnSync(process.execPath, [entry], { cwd: root, encoding: 'utf8' })
+
+// ⚠️ stdout 与 stderr 都无条件透传，不要按退出码分别处理。
+// 之前只在 status !== 0 时打印 stderr、且始终打印 stdout——
+// 但子进程若被信号杀死或被 OOM，status 是 null 且 stdout 可能为空，
+// 现场看起来就是「EXIT=1 且零输出」，比报错更难查（实验室实测踩到）。
 process.stdout.write(result.stdout || '')
-if (result.status !== 0) {
-  process.stderr.write(result.stderr || '')
+process.stderr.write(result.stderr || '')
+
+if (result.error) {
+  console.error('permit-window-test: 子进程未能正常启动 —', result.error.message)
+  process.exit(1)
 }
-process.exit(result.status === null ? 1 : result.status)
+if (typeof result.status !== 'number') {
+  console.error('permit-window-test: 子进程被信号终止 signal=' + String(result.signal))
+  process.exit(1)
+}
+process.exit(result.status)
