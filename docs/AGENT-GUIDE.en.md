@@ -270,6 +270,8 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 | `NO_MAILBOX` | Nobody registered in the target workspace | Have the peer `session_register_name` |
 | `PRESET_NOT_FOUND` | Preset id does not exist | Use a real preset id |
 | `CONFIRM_REQUIRED` | Confirmation token invalid or expired | Send the first request again for a new token |
+| `AGENT_CREATE_DISABLED` | Settings forbid agent-created sessions | **Do not work around it** (no hand-made directories, no scripts). Tell the human to enable it, or use DSH native session creation |
+| `PRESET_REQUIRED` | "Ask for preset" is on but none was given | List presets for the human to choose, then retry |
 
 ---
 
@@ -298,6 +300,8 @@ Change these in **DSH Settings → Session Orchestration** (auto-saved, recompos
 |---|---|---|
 | `requireDeleteConfirm` | `true` | Require the second explicit confirmation before deleting a directory. Path guards still apply when off |
 | `guardSystemDrive` | `true` | Refuse to create or delete inside the system drive, `DSH_HOME` or the install directory |
+| `allowAgentCreateSession` | `false` | Let the agent start sessions through this plugin. **Off by default**: `session_init_workspace` and `session_handoff` return `AGENT_CREATE_DISABLED` and you must use DSH native subagents instead |
+| `askPresetOnCreate` | `false` | Require listing presets for a human to choose before creating. Off means an omitted preset falls back to the DSH default |
 | `guardedPaths` | `[]` | Extra forbidden absolute paths; **append only**, built-in protection cannot be removed |
 | `allowCrossWorkspace` | `false` | Allow letters into unrelated workspaces |
 

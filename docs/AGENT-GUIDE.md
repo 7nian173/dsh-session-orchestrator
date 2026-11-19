@@ -270,6 +270,8 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 | `NO_MAILBOX` | 目标工作区没人注册过 | 让对方先 `session_register_name` |
 | `PRESET_NOT_FOUND` | 预设 id 不存在 | 用真实存在的预设 id |
 | `CONFIRM_REQUIRED` | 确认令牌无效/过期 | 重新发第一次请求拿新令牌 |
+| `AGENT_CREATE_DISABLED` | 设置里禁止 agent 新建会话 | **不要绕路**（别手工建目录、别上脚本）。告诉人类去设置里开启，或改用 DSH 原生新建会话 |
+| `PRESET_REQUIRED` | 开了「先问预设」但没给预设 | 列出可用预设让人类挑，再重试 |
 
 ---
 
@@ -298,6 +300,8 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 |---|---|---|
 | `requireDeleteConfirm` | `true` | 递归删除要求第二次显式回「确认删除」。关掉后路径护栏仍生效 |
 | `guardSystemDrive` | `true` | 拒绝在系统盘、`DSH_HOME`、应用安装目录内建目录或递归删除 |
+| `allowAgentCreateSession` | `false` | 允许 agent 通过本插件新建会话。**默认关**：关闭时 `session_init_workspace` 与 `session_handoff` 返回 `AGENT_CREATE_DISABLED`，你只能用 DSH 原生子代理 | 
+| `askPresetOnCreate` | `false` | 新建时必须先列预设让人挑。关闭时未指定预设交给 DSH 默认 |
 | `guardedPaths` | `[]` | 额外禁区（绝对路径数组），**只能追加**，不能删掉内置保护 |
 | `allowCrossWorkspace` | `false` | 允许跨到无关工作区发信 |
 
