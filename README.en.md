@@ -214,6 +214,14 @@ Host services are preferred; these files are only a fallback when a service is u
 
 Both are adjustable in settings: protected directories can only be **extended**, never reduced; the second confirmation can be switched off (path guards still apply when it is).
 
+## Use your own wording
+
+After a registration the assistant tells you "from here you can say: send <what> to <name>".
+
+You do **not** have to use exactly that. "deliver it to him", "give them a heads-up", "pass this along" all work — the first time a new phrasing shows up the assistant does the job and records it, and from then on it recognises that phrasing.
+
+Where it lives: `$DSH_HOME/session-bridge/agent-prefs.json` — plugin-level preference, never written into a workspace.
+
 ## Settings
 
 Configure the plugin under **DSH Settings → Session Orchestration**. The page has three sections: Mailbox / Safety / Advanced, each with its explanation inline.
@@ -283,6 +291,7 @@ Both buttons are one-shot: once clicked they are gone, and a refresh does not br
 
 | Version | Date | Theme |
 |---|---|---|
+| `0.3.1` | 2026-11-19 | Slash commands, natural-language seeds, safety gates, preference memory, archive hygiene |
 | `0.3.0` | 2026-11-19 | Settings page, safety guards, agent guide, `@` friends, portability |
 | `0.2.1` | 2026-11-18 | Delivery gating, cancel and expiry, urgent, timestamps |
 | `0.2.0` | 2026-11-18 | Automatic receipt on delivery, start-of-work banner |
