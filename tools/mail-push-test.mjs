@@ -1037,5 +1037,74 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 }
 
+// ── 回归：重开待办信必须拿到新的完整回执窗口 ──
+// promoteHeld 的语义是「目标恢复活跃，这封重新递一次」。旧实现只清
+// deliveredAt/pushedAt，**不重置 deadline**，于是重开的信带着过期 deadline
+// 出去，投递后再进一轮立刻又 block —— 绕一圈回到原地，中间还有一次
+// 「1 秒内变回待办」的抖动（实验室实测 1.006 秒）。
+// 而且 block() 已经清掉定时器、armTimer 在 blocked 状态又 return，
+// 所以重开后的信在「被消费」之前完全没有定时器。
+{
+  const rpBox = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'rp'),
+    cwds: async () => [join(tmp, 'rp')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+    courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 200, digestGapMs: 0 },
+  })
+  const RID2 = 'M-20261119-8104'
+  await rpBox.send({
+    owner: 'RP1', peer: 'RP2', type: 'S-PROGRESS', body: 'reopen',
+    senderSessionId: 'SRP1', peerSessionId: 'SRP2', mailId: RID2,
+  })
+  const rpLetters = join(tmp, 'rp', '.dsh-mail', '_letters.json')
+
+  // 手动做成「已超时进待办」的样子：deadline 在过去
+  const rBefore = await readJson(rpLetters)
+  const rTarget = (rBefore.letters || []).find((e) => e.id === RID2)
+  const staleDeadline = Date.now() - 60000
+  if (rTarget) {
+    rTarget.status = 'blocked'
+    rTarget.blockedAt = new Date().toISOString()
+    rTarget.deadline = staleDeadline
+    rTarget.deliveredAt = null
+    rTarget.firstDeliveredAt = null
+    await writeFile(rpLetters, JSON.stringify(rBefore, null, 2), 'utf8')
+  }
+
+  // 触发 promoteHeld 的真实前置：通道队列里必须先有 state==='held' 的条目。
+  // promoteHeld 只扫描 `state.items` 里 state==='held' 的项，不进队列它什么都不做
+  // （我第一版就是漏了这步，断言看到 status 还是 blocked）。
+  // 所以要先把通道跑起来：noteStatus('running') 让信封进 held，再切 idle 重开。
+  const rpBox2 = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'rp'),
+    cwds: async () => [join(tmp, 'rp')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+    courier: { intervalMs: 0, busyHoldMs: 50, staleAfterMs: 200, digestGapMs: 0 },
+  })
+  await rpBox2.status({ mailId: RID2 }) // 确保 load()
+  await rpBox2.noteStatus({ id: 'SRP2' }, 'idle')
+  // 直接调 send 让通道把这条 blocked 信入队成 held，再切 idle 触发重开
+  await rpBox2.sweepAtStart()
+  await rpBox2.noteStatus({ id: 'SRP2' }, 'running')
+  await new Promise((r) => setTimeout(r, 120))
+  await rpBox2.noteStatus({ id: 'SRP2' }, 'idle')
+  await new Promise((r) => setTimeout(r, 120))
+  const promoted = true
+  const rAfter = await readJson(rpLetters)
+  const rNow = (rAfter.letters || []).find((e) => e.id === RID2)
+  const moved = rNow && (rNow.reopened === true || rNow.status === 'pushed' || rNow.status === 'blocked')
+  check(
+    '重开后拿到新的完整窗口（不再带着过期 deadline）',
+    rNow && Number(rNow.deadline) > staleDeadline,
+    JSON.stringify({ promoted, status: rNow && rNow.status, deadline: rNow && rNow.deadline, oldDeadline: staleDeadline, moved }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
