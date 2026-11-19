@@ -124,6 +124,31 @@ It does not work for the desktop profile, which Electron manages exclusively and
 | `staleAfterMs` | `1800000` | Time an envelope may sit untouched before one extra nudge |
 | `digestGapMs` | `600000` | Minimum gap between two sender digests while the count is unchanged |
 
+## Settings page
+
+Configure this plugin under **Settings → Session Orchestration** (left nav, `order: 50`).
+
+- One entry, one page, three sections: Mailbox / Safety / Advanced.
+- Edits **save automatically** (600ms debounce) and the host recomposes the plugin immediately — no app restart.
+- The full skeleton renders first and values fill in behind it; the block is dimmed and inert while filling, so an empty value can never overwrite the real config.
+- Every switch carries the reason it exists, especially the two safety ones.
+
+## Agent guide
+
+The guide written **for agents** lives in [`docs/AGENT-GUIDE.md`](./docs/AGENT-GUIDE.md). It covers:
+
+- a thirty-second lookup table (intent → tool)
+- three hard rules: a reply is not an acknowledgement; status letters are fixed English; `done` cannot be cancelled while `acked` can
+- camelCase request fields, letter types and required extras
+- the full delivered / receipt / todo state flow
+- delivery gating: nothing is pushed by default, so agents must pull with `mail_inbox`
+- backpressure and soft release, cancellation semantics, friend names and the `@` menu
+- dangerous actions (two-phase workspace deletion, protected directories)
+- ten rejection codes and how to recover
+- five boundaries to respect
+
+**When recommending this plugin to someone else, have their agent read that file first.**
+
 ## Two entry points
 
 External programs and agents use the same capabilities through different doors.
