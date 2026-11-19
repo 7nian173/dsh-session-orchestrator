@@ -582,5 +582,59 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   }
 }
 
+// ── 回归：deadline 非法时 armTimer 不能把信当场打成待办 ──
+// 老数据 / 手改过的账本里 deadline 可能是 null。`null - Date.now()` 是 -Date.now()，
+// `Math.max(1000, -Date.now())` 给 1000 —— 只延迟 1 秒就 block。
+// 而 NaN 更糟：`Math.max(1000, NaN)` 是 NaN，setTimeout 当 0，立刻触发 block。
+// 这两种都不该让一封正常的信在 1 秒内变待办。
+{
+  const nanBox = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'nan'),
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const NID = 'M-20261119-7801'
+  await nanBox.send({
+    owner: 'N1', peer: 'N2', type: 'S-PROGRESS', body: 'nan',
+    senderSessionId: 'SN1', peerSessionId: 'SN2', mailId: NID,
+  })
+  // 直接读落盘状态，把 deadline 弄成 null，再让它重新进入 armTimer 路径。
+  const lettersPath = join(tmp, 'nan', '.dsh-mail', '_letters.json')
+  const before = await readJson(lettersPath)
+  const target = (before.letters || []).find((entry) => entry.id === NID)
+  check('落盘里找到待改的信', Boolean(target), JSON.stringify((before.letters || []).map((e) => e.id)))
+  if (target) {
+    target.deadline = null // null 与 NaN 走同一条兜底分支
+    await writeFile(lettersPath, JSON.stringify(before, null, 2), 'utf8')
+  }
+
+  // 新开一个信箱实例读这份文件 → load() → 冷扫 → armTimer。
+  // 注意：load() 只遍历 boxes 里已经登记过的 cwd，所以必须先让它碰一次这个目录
+  // （一次 status 查询就够），否则 sweepAtStart 会扫 0 封、断言变成空转。
+  // 关键：createMailbox 的 `cwds` 决定 load() 扫哪些目录。
+  // 不传就是空数组 —— load() 扫 0 个目录、status() 永远返回 0 条，
+  // 断言会变成「看起来通过」的空转（我第一版就踩了这个）。
+  const nanBox2 = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'nan'),
+    cwds: async () => [join(tmp, 'nan')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await nanBox2.status({ mailId: NID }) // 触发 load()
+  await nanBox2.sweepAtStart()
+  await new Promise((r) => setTimeout(r, 1500)) // 超过 1 秒，旧代码此时已成 blocked
+  const st2 = await nanBox2.status({ mailId: NID })
+  const row2 = (st2.rows || [])[0] || {}
+  check(
+    'deadline 非法不会把信在 1 秒内打成待办',
+    row2.status !== 'blocked' && Boolean(row2.status),
+    JSON.stringify({ status: row2.status, deadline: row2.deadline }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)

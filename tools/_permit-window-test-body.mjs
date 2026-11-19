@@ -66,13 +66,23 @@ const makeController = (records) => {
  * 起一个真的 dispatcher（dispatcher: true 才会轮询队列）。
  * 队列根目录用临时目录，避免污染真实的 session-bridge。
  */
-const start = async (records) => {
+const start = async (records, { askPresetOnCreate = false } = {}) => {
   const root = await mkdtemp(join(tmpdir(), 'permit-ws-'))
   await mkdir(join(root, 'inbox'), { recursive: true })
   const controller = makeController(records)
   const ctx = {
     get: (key) => {
       if (key === 'sessionController') return controller
+      // 门控之后的业务链要能走到底，才测得到「成功后消耗」。
+      // 缺 agentPresets 会让每个请求都停在 PRESET 解析之前，授权永远不被消耗——
+      // 那样「第二次不放行」这条断言就测不出东西（我第一版正是这样）。
+      if (key === 'agentPresets') return { resolve: async (id) => ({ id }) }
+      if (key === 'workspaceRegistry') {
+        return {
+          resolveByPath: async (path) => ({ id: 'ws-stub', path, title: 'stub' }),
+          create: async (path, title) => ({ id: 'ws-stub', path, title }),
+        }
+      }
       if (key === 'connection') return { requestRejection: () => undefined }
       if (key === 'tools') return { register: () => () => {} }
       if (key === 'commands') return { register: () => () => {} }
@@ -84,25 +94,24 @@ const start = async (records) => {
       return typeof dispose === 'function' ? dispose : () => {}
     },
   }
-  apply(ctx, { dir: root, dispatcher: true, pollMs: 60, sweepFriends: false })
+  apply(ctx, { dir: root, dispatcher: true, pollMs: 60, sweepFriends: false, askPresetOnCreate })
   return { root, controller }
 }
 
 /** 投一个 init_workspace 请求，等 dispatcher 出结果。 */
-const submit = async (root, creatorSessionId) => {
+const submit = async (root, creatorSessionId, options = {}) => {
   const id = 'permit-' + randomUUID().slice(0, 8)
-  await writeFile(
-    join(root, 'inbox', id + '.json'),
-    JSON.stringify({
-      id,
-      action: 'init_workspace',
-      project: 'permit-probe',
-      cwd: 'D:\\dshdata\\本地\\_permit_probe',
-      preset: 'cordis',
-      creatorSessionId,
-    }),
-    'utf8',
-  )
+  const request = {
+    id,
+    action: 'init_workspace',
+    project: 'permit-probe',
+    cwd: 'D:\\dshdata\\本地\\_permit_probe',
+    creatorSessionId,
+  }
+  // omitPreset：模拟「agent 没给预设」→ 开了 askPresetOnCreate 时业务会以 PRESET_REQUIRED 拒绝，
+  // 用来验证「门控过了但业务失败」不会烧掉人类授权。
+  if (options.omitPreset !== true) request.preset = 'cordis'
+  await writeFile(join(root, 'inbox', id + '.json'), JSON.stringify(request), 'utf8')
   for (let i = 0; i < 400; i += 1) {
     for (const sub of ['outbox', 'done', 'failed']) {
       try {
@@ -164,8 +173,12 @@ const gated = (result) => codeOf(result) === 'AGENT_CREATE_DISABLED'
   const { root } = await start(records)
   const first = await submit(root, 'session-once')
   const second = await submit(root, 'session-once')
-  check('首次放行', !gated(first), JSON.stringify({ code: codeOf(first) }))
-  check('同一条人类消息第二次不放行', gated(second), JSON.stringify({ code: codeOf(second) }))
+  check('首次放行', !gated(first), JSON.stringify({ code: codeOf(first), ok: first.ok }))
+  check(
+    '同一条人类消息第二次不放行',
+    gated(second),
+    JSON.stringify({ code: codeOf(second), ok: second.ok, message: second.error && second.error.message }),
+  )
   await rm(root, { recursive: true, force: true })
 }
 
@@ -174,6 +187,69 @@ const gated = (result) => codeOf(result) === 'AGENT_CREATE_DISABLED'
   const { root, controller } = await start([])
   const result = await submit(root, 'session-empty')
   check('空事件表 → 拒绝且不空转', gated(result) && controller.calls.length === 1, JSON.stringify({ code: codeOf(result), pages: controller.calls.length }))
+  await rm(root, { recursive: true, force: true })
+}
+
+// ── 场景 6：旧的已消费消息不能遮蔽更早/更新的意图 ──
+// 真实路径：agent 第一次调工具（授权被取走）→ 因为缺预设被拒 → 人类补一句「用 cordis」
+// → agent 重试。此时那条人类消息已被消费，旧代码扫到它就 return false，永久拒绝。
+// 修复后必须继续往前翻，找到另一条能放行的意图（这里换成「更新的那条还没消费」）。
+{
+  const records = []
+  for (let seq = 1; seq <= 300; seq += 1) {
+    if (seq === 5) records.push(humanEvent(5, PERMIT_TEXT)) // 旧的那条，第一次会被消费
+    else if (seq === 250) records.push(humanEvent(250, '再帮我建个工作区吧')) // 新的那条
+    else records.push(agentEvent(seq, 'x'))
+  }
+  const { root } = await start(records)
+  const first = await submit(root, 'session-shadow')
+  check('场景6 首次放行', !gated(first), JSON.stringify({ code: codeOf(first) }))
+  // 第二次：seq 250 那条也会被消费；再往下还有 seq 5。若实现「命中已消费就放弃」，这里会被拒。
+  const second = await submit(root, 'session-shadow')
+  check('已消费的旧消息不遮蔽更早的意图', !gated(second), JSON.stringify({ code: codeOf(second) }))
+  await rm(root, { recursive: true, force: true })
+}
+
+// ── 场景 7：业务失败不烧掉授权 ──
+// 门控通过后还有会失败的地方（缺预设 → PRESET_REQUIRED；路径不合法；宿主服务不在）。
+// 旧代码门控一通过就 takeHumanPermit 消耗掉，那一步失败就等于把人类的这次要求白烧了。
+// 判据：第一次请求因 PRESET_REQUIRED 失败之后，第二次带合法预设应当仍被放行。
+{
+  const records = []
+  for (let seq = 1; seq <= 300; seq += 1) {
+    records.push(seq === 20 ? humanEvent(20, PERMIT_TEXT) : agentEvent(seq, 'x'))
+  }
+  const { root } = await start(records, { askPresetOnCreate: true })
+  // 第一次：不给 preset，且打开 askPresetOnCreate → 门控过、业务拒（PRESET_REQUIRED）
+  const first = await submit(root, 'session-burn', { omitPreset: true })
+  check('场景7 首次因缺预设失败', codeOf(first) === 'PRESET_REQUIRED', JSON.stringify({ code: codeOf(first) }))
+  // 第二次：补上预设 → 授权不该已经被烧掉
+  const second = await submit(root, 'session-burn')
+  check('业务失败不烧掉人类授权', !gated(second), JSON.stringify({ code: codeOf(second) }))
+  await rm(root, { recursive: true, force: true })
+}
+
+// ── 场景 8：已消费的意图在**前一页**，未消费的在更早页 ──
+// 跨页版本：第一页（最新 500 条）只有一条已消费的意图，真正的授权在更早的页里。
+// 若实现「页级 consumed 直接放弃」，会停在第一页返回拒绝，永远翻不到第 2 页。
+{
+  const records = []
+  for (let seq = 1; seq <= 1400; seq += 1) {
+    if (seq === 5) records.push(humanEvent(5, PERMIT_TEXT)) // 第 3 页（最旧）
+    else if (seq === 1300) records.push(humanEvent(1300, '再建个工作区')) // 第 1 页（最新）
+    else records.push(agentEvent(seq, 'x'))
+  }
+  const { root, controller } = await start(records)
+  const first = await submit(root, 'session-crosspage')
+  check('场景8 首次放行（消耗最新那条）', !gated(first), JSON.stringify({ code: codeOf(first) }))
+  const pagesAfterFirst = controller.calls.length
+  const second = await submit(root, 'session-crosspage')
+  check(
+    '页级只含已消费意图时继续翻页',
+    !gated(second),
+    JSON.stringify({ code: codeOf(second), pagesAfterFirst, pagesTotal: controller.calls.length }),
+  )
+  check('场景8 确实翻了 2 页以上', controller.calls.length > pagesAfterFirst, JSON.stringify({ pagesAfterFirst, pagesTotal: controller.calls.length }))
   await rm(root, { recursive: true, force: true })
 }
 
