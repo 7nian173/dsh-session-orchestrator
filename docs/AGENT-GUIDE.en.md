@@ -200,7 +200,7 @@ Everything else is **written to disk only**. Therefore:
 - **`@` on a past session does not register it**: `@` also carries file and past-session references, which pull in context. Registering a friend is a **separate action** — only do it (via `session_register_name` or `/register-peer`) when the human explicitly asks to register a given session under a name. Never add a session to the friends table just because it was mentioned through `@`.
 - **Slash commands (two, separate meanings)**:
   - `/register-me <name>` — register **yourself** under that name.
-  - `/register-peer <workspace> <sessionId> [name]` — add **someone else** to the friends table; without a name it derives `<workspace>-<last 4 of id>` and disambiguates collisions with a path fragment.
+  - `/register-peer` — add **someone else** to the friends table. **There is no fixed format**: any mix of session id, workspace name and name works; missing pieces are filled in (the name is derived as `<workspace>-<last 4 of id>`, several matches are listed to choose from, no match lists existing sessions). Never ask a human to follow a template.
   Both are executed by the host `commands` service and **do not enter the model context**.
 
 ---

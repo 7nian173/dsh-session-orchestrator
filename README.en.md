@@ -89,14 +89,25 @@ Two commands, two different jobs:
 | Command | Effect |
 |---|---|
 | **`/register-me <name>`** | Register **yourself** under that name |
-| **`/register-peer <workspace> <sessionId> [name]`** | Add **someone else** to the friends table and name them |
+| **`/register-peer`** | Add **someone else** to the friends table and name them |
 
 ```
 /register-me 本地-c91e
 /register-peer Super-agent session-42635e1a-0089-425f-9441-7c9b1ffc8431 决策
 ```
 
-Omitting the name in `/register-peer` derives `<workspace>-<last 4 of id>`; colliding workspace names get a path fragment appended, so you need not care.
+`/register-peer` **has no fixed format** — give whatever you have:
+
+```
+/register-peer session-42635e1a-0089-425f-9441-7c9b1ffc8431
+/register-peer Super-agent
+/register-peer session-42635e1a-… 决策
+```
+
+- Id only → the name is derived as `<workspace>-<last 4 of id>`
+- Workspace only → a single match registers directly; several are listed for you to pick
+- A name with spaces goes in quotes
+- Nothing matches → no "format error"; it lists existing sessions for you to copy
 
 Press Enter to run; you get a confirmation. An invalid name reports the rules.
 

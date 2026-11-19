@@ -89,14 +89,25 @@ FatFish-Whisper-workspace-b2b6
 | 命令 | 作用 |
 |---|---|
 | **`/register-me <名字>`** | 把**自己**登记成这个名字 |
-| **`/register-peer <工作区> <会话id> [名字]`** | 把**别人**加进好友表并命名 |
+| **`/register-peer`** | 把**别人**加进好友表并命名 |
 
 ```
 /register-me 本地-c91e
 /register-peer Super-agent session-42635e1a-0089-425f-9441-7c9b1ffc8431 决策
 ```
 
-`/register-peer` 省略名字时会自动取「工作区名-会话尾号」；如果有同名工作区，会补路径缩略区分，不用你操心。
+`/register-peer` **不要求格式**，给多少算多少：
+
+```
+/register-peer session-42635e1a-0089-425f-9441-7c9b1ffc8431
+/register-peer Super-agent
+/register-peer session-42635e1a-… 决策
+```
+
+- 只给会话 id → 名字自动取「工作区名-会话尾号」
+- 只给工作区名 → 只有一个匹配就直接注册，多个就列出来让你挑
+- 名字想用空格，用引号包起来
+- 给的信息对不上 → 不会回你「格式错误」，而是把现有会话列出来让你复制一行
 
 回车即执行，会回你一句确认。名字不合规时直接告诉你规则。
 
