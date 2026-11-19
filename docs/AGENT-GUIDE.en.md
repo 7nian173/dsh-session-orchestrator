@@ -140,6 +140,13 @@ If unsure, ask **one** question: "register it as a DSH workspace and open a sess
 
 **A seed only reminds you not to skip a step.** When information is missing, ask (`ask_user_question`, all at once); do not barrel ahead just because a seed fired.
 
+## 2.6 Bundled skill (recommended)
+
+The plugin ships a skill `session-orchestrator` (`skills/session-orchestrator/SKILL.md`).
+It spells out "spoken request → which flow" in more detail, especially the `init-workspace` boundary in §1.
+
+**It runs with or without the skill installed**; with it you will ask far fewer irrelevant questions. When intent is unclear, read the skill first.
+
 ## 3. Three hard rules
 
 ### A reply is not an acknowledgement

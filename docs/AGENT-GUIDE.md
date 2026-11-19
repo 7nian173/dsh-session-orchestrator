@@ -140,6 +140,13 @@ dsh plugin --profile <环境名> add github:<账户>/dsh-session-orchestrator
 
 **种子的意义只是提醒你别漏流程**。信息不全时要主动问（用 `ask_user_question` 一次问完），不要因为拿到种子就硬着头皮建。
 
+## 2.6 配套 skill（建议装）
+
+插件附了 skill `session-orchestrator`（`skills/session-orchestrator/SKILL.md`）。
+它把「口语 → 该走哪条流程」的判断写得更细，尤其 §1「建工作区」的边界。
+
+**装与不装都可运行**；装了之后你会少问很多无关问题。判断意图拿不准时优先读它。
+
 ## 3. 三条硬规则
 
 ### 回信 ≠ 回执

@@ -214,6 +214,31 @@ Host services are preferred; these files are only a fallback when a service is u
 
 Both are adjustable in settings: protected directories can only be **extended**, never reduced; the second confirmation can be switched off (path guards still apply when it is).
 
+## Bundled skill (optional, works without it)
+
+The plugin ships a skill: **`session-orchestrator`**.
+
+What it does: when the assistant hears plain speech like "make me a workspace" or "tell the decision session about this", the skill tells it **which flow to run and where the boundaries are**.
+The plugin works without it — the built-in hints already spell the intent out. With it, the assistant judges better and asks less.
+
+### Why install it
+
+Without the skill the assistant sometimes reads "make a workspace" as "generate a project skeleton" or "tidy a directory", then asks a string of unrelated questions.
+The skill pins the boundary: this plugin only **registers a DSH workspace and opens a session**. Skeleton generation is not its job.
+
+### How to install
+
+Copy the `skills/session-orchestrator/` folder from the plugin directory into your skills directory:
+
+| Location | Scope |
+|---|---|
+| `<workspace>/.dsh/skills/` | this workspace only |
+| `D:\dshdata\skills/` | global (adjust to your DSH_HOME) |
+
+Refresh the page afterwards; if `session-orchestrator` shows up in the skill list, it is installed.
+
+**Not required.** If your assistant is already accurate, skip this section.
+
 ## Use your own wording
 
 After a registration the assistant tells you "from here you can say: send <what> to <name>".
