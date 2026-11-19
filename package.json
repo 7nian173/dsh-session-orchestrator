@@ -18,6 +18,7 @@
     "docs/architecture.html",
     "docs/config-chains.md",
     "tools/mail-push-test.mjs",
+    "tools/permit-window-test.mjs",
     "tools/mail-index-repair.mjs"
   ],
   "keywords": [
