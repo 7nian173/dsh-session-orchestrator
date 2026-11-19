@@ -212,6 +212,7 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 - **自动注册名**格式：`<工作区目录名>-<会话ID后四位>`，例如 `本地-c91e`。工作区前缀不能省。
 - 一个会话一个主名；重新注册会替换。旧名想保留，可以在 `$DSH_HOME/session-bridge/friends.json` 里为同一 `sessionId` 加第二条记录。
 - **`@` 菜单**：输入框敲 `@`「好友」分类，显示 `注册名 · 会话id`，选中插入原生会话引用 `@[名字](dsh-session:…)`。
+- **归档会话在插件里不存在**：会话被 DSH 归档后，它的好友名立刻失效（`FRIEND_ARCHIVED`），也不再出现在 `sessions` / `/register-peer` 的候选里。后台每 5 分钟清扫一次好友表。**这只是本插件的卫生规则**，DSH 原生会话列表照旧列全部，不要拿这个去解释 DSH 的行为。
 - **`@` 历史会话不会自动注册**：`@` 本身还承载「引用文件」「引用历史会话」，那些会引入上下文。注册好友是**独立动作**——只有人类明确说「把某会话注册成某名字」时才走 `session_register_name` 或 `/register-peer`。不要因为人类在 `@` 里提到了某个会话就顺手把它加进好友表。
 - **斜杠命令（两个，语义分开）**：
   - `/register-me <名字>` —— 把**自己**登记成这个名字。名字不合法时**自动删掉不合法字符**（空格折成连字符、标点删掉、超长截断），结果会告诉你改成了什么；全是废字符才拒绝。
@@ -264,6 +265,7 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 | `MAIL_INVALID` | 字段缺失或类型不对 | 对照 §4 检查 camelCase 与必填 |
 | `MAIL_NOT_FOUND` | mail_id 不存在 | 用 `mail_inbox` / `mail_list` 确认真实 id |
 | `FRIEND_NOT_FOUND` | 名字没注册 | `session_list_names` 看一眼，或直接传 sessionId |
+| `FRIEND_ARCHIVED` | 这个名字属于已归档会话 | 换一个活着的目标；归档会话在插件里**等于不存在** |
 | `SENDER_NOT_REGISTERED` | 你自己没登记 | `session_register_name` |
 | `CROSS_WORKSPACE_DISABLED` | 跨工作区被拒 | 需要人类在设置里开「跨工作区放行」 |
 | `TARGET_ARCHIVED` | 目标会话已归档 | 换一个目标 |

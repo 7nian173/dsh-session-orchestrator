@@ -212,6 +212,7 @@ Everything else is **written to disk only**. Therefore:
 - **Auto-registered name** format: `<workspace folder name>-<last 4 of sessionId>`, e.g. `本地-c91e`. The workspace prefix is never dropped.
 - One primary name per session; re-registering replaces it. To keep an old name alive, add a second entry with the same `sessionId` in `$DSH_HOME/session-bridge/friends.json`.
 - **`@` menu**: typing `@` offers a **Friends** category showing `name · session id`; selecting inserts a native session reference `@[name](dsh-session:…)`.
+- **Archived sessions do not exist here**: once DSH archives a session its friend name stops resolving (`FRIEND_ARCHIVED`) and it disappears from `sessions` and from `/register-peer` candidates. A background sweep prunes the friends table every 5 minutes. **This is the plugin's own hygiene rule** — DSH's native session list still shows everything; do not use this to explain DSH behaviour.
 - **`@` on a past session does not register it**: `@` also carries file and past-session references, which pull in context. Registering a friend is a **separate action** — only do it (via `session_register_name` or `/register-peer`) when the human explicitly asks to register a given session under a name. Never add a session to the friends table just because it was mentioned through `@`.
 - **Slash commands (two, separate meanings)**:
   - `/register-me <name>` — register **yourself** under that name. An illegal name is **cleaned automatically** (spaces become hyphens, punctuation is dropped, over-long names truncated) and the result tells you what it became; only an all-invalid name is refused.
@@ -264,6 +265,7 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 | `MAIL_INVALID` | Missing or wrong-typed field | Check camelCase and required extras per §4 |
 | `MAIL_NOT_FOUND` | Unknown mail_id | Confirm the real id with `mail_inbox` / `mail_list` |
 | `FRIEND_NOT_FOUND` | Name not registered | Check `session_list_names`, or pass a sessionId |
+| `FRIEND_ARCHIVED` | The name belongs to an archived session | Pick a live target; archived sessions **do not exist** as far as this plugin is concerned |
 | `SENDER_NOT_REGISTERED` | You are not registered | `session_register_name` |
 | `CROSS_WORKSPACE_DISABLED` | Cross-workspace refused | A human must enable it in settings |
 | `TARGET_ARCHIVED` | Target session archived | Pick another target |
