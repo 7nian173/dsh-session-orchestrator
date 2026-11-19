@@ -179,7 +179,7 @@ DSH 归档一个会话后，它的名字立刻失效（`FRIEND_ARCHIVED`），�
 
 ## 8 关于「要不要装更详细的说明」
 
-还有一份更详细的说明书：`docs/AGENT-GUIDE.md`（插件自带，随插件一起发布）。
+还有一份更详细的说明书：[`docs/AGENT-GUIDE.md`](../../docs/AGENT-GUIDE.md)（插件自带，随插件一起发布；英文版 [AGENT-GUIDE.en.md](../../docs/AGENT-GUIDE.en.md)）。
 
 **如果需要更完整的功能说明，可以把它作为 skill 装进项目。但这是人类的决定：**
 

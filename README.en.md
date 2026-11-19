@@ -18,6 +18,32 @@ This document is **for humans**. The plugin ships two manuals aimed at assistant
 
 That is usually enough. The skill suits daily use where you want fewer questions; the manual suits one-off work where details matter.
 
+## Contents
+
+**Getting started**
+
+- [Start a new session](#start-a-new-session) · [Jump to another session](#jump-to-another-session) · [Write letters](#write-letters-to-each-other) · [`@`-mention people](#@-mention-people)
+- [Friend registration and naming](#friend-registration-and-naming) — how names work, why a prefix helps, how to type the commands
+- [Asking for a workspace explicitly](#asking-for-a-workspace-explicitly) — one sentence, or `/new-workspace`
+- [Use your own wording](#use-your-own-wording) — no fixed phrasing to memorise
+
+**Read before you start**
+
+- [It touches your disk](#it-touches-your-disk--read-this-first) — privileged behaviour, where data lives, the two gates
+
+**Configuration and install**
+
+- [Settings](#settings) — what each of the four safety gates controls
+- [Install](#install) — first install / after changing code
+- [Requirements](#requirements) · [Troubleshooting](#troubleshooting)
+
+**Other**
+
+- [Bundled skill](#bundled-skill-optional-works-without-it) — optional; fewer questions with it
+- [Version](#version) · [License](#license)
+
+---
+
 Installing this gives your sessions four capabilities: **start new sessions, jump between them, write letters to each other, and `@`-mention people**.
 
 In one line: **spin up a new workspace in a sentence, have your agent jump to any session, and let agents talk across sessions (and across workspaces) through a mailbox.**
@@ -46,6 +72,12 @@ What it gives you:
 - **Cancellable.** A letter that became obsolete can be cancelled and shows as expired.
 - **Urgent.** Urgent letters jump the queue regardless of whether the target is busy.
 - **Groups form automatically.** After a few round trips the pair gets a group and routes through it.
+
+To see whether anything arrived, or whether something is still unprocessed, just ask the assistant:
+
+> what is waiting for me?
+
+It lists them for you. No need to hunt through files.
 
 ## Friend registration and naming
 
@@ -219,6 +251,23 @@ Host services are preferred; these files are only a fallback when a service is u
 - It does not modify DSH's own storage files (read-only).
 - It does not delete a directory recursively without the confirmation gate (on by default).
 
+### Where the data lives, and how to clean up
+
+```
+<workspace>/.dsh-mail/                    letters and ledger (one per workspace)
+$DSH_HOME/session-bridge/friends.json     global friends table
+$DSH_HOME/session-bridge/agent-prefs.json phrasings the assistant remembered
+$DSH_HOME/session-bridge/heartbeat.json   is the plugin alive
+$DSH_HOME/session-bridge/deleted-workspaces.jsonl  deleted-workspace ledger
+$DSH_HOME/session-bridge/client-reports/  browser-side diagnostics
+```
+
+**Backup / cleanup**:
+
+- Before deleting a workspace, copy that workspace's `.dsh-mail/` out; otherwise the letters go with it.
+- Full reset: delete `$DSH_HOME/session-bridge/` and every workspace's `.dsh-mail/`; the plugin rebuilds them.
+- `client-reports/` is diagnostics only; deleting it breaks nothing.
+
 ### Two gates
 
 | Gate | Effect |
@@ -382,7 +431,7 @@ Both buttons are one-shot: once clicked they are gone, and a refresh does not br
 
 | Version | Date | Theme |
 |---|---|---|
-| `0.3.1` | 2026-11-19 | Slash commands, natural-language seeds, safety gates, preference memory, archive hygiene |
+| `0.3.1` | 2026-11-19 | Slash commands (`/new-workspace`, `/register-me`, `/register-peer`), natural-language seeds, safety gates, preference memory, archive hygiene |
 | `0.3.0` | 2026-11-19 | Settings page, safety guards, agent guide, `@` friends, portability |
 | `0.2.1` | 2026-11-18 | Delivery gating, cancel and expiry, urgent, timestamps |
 | `0.2.0` | 2026-11-18 | Automatic receipt on delivery, start-of-work banner |
