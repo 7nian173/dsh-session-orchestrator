@@ -111,6 +111,33 @@ Matching is loose, but it never intercepts or rewrites the human message, and ne
 | `send-letter` | "send X a message", "let them know" | Confirm the recipient → register if needed → `mail_send` |
 | `any-session` | "jump to that session", "open the X session" | Offer candidates when ambiguous, then `session_jump` |
 
+### The `init-workspace` boundary (the easiest thing to get wrong)
+
+When a human says "make me a workspace", **this plugin has exactly one job**:
+
+> Register a DSH workspace for that directory and immediately start a session (`session_init_workspace`).
+
+**Ask two things only**: where the directory goes, and what the project is called. One round.
+
+**Do not ask these** — they are not this plugin's business:
+
+- ❌ "Which kind of workspace?" (new project dir / DSH workspace / tidy an existing dir)
+- ❌ "What will this workspace be used for?"
+- ❌ "Node or Python skeleton?"
+- ❌ "Generate README / AGENTS.md / .gitignore?"
+
+Generating directory contents, stack skeletons or READMEs is **ordinary file work** — do that per the human's intent, without dragging this plugin in.
+
+**When not to use this plugin**:
+
+| What the human means | What to do |
+|---|---|
+| Tidy an existing directory into a proper structure | Ordinary file work: add AGENTS.md / structure / ignore rules |
+| Add a README or scaffold to a project | Ordinary file work |
+| "Put this directory under DSH and open a session" | ✅ use `session_init_workspace` |
+
+If unsure, ask **one** question: "register it as a DSH workspace and open a session, or tidy the directory structure?" — one question, not a menu of four options.
+
 **A seed only reminds you not to skip a step.** When information is missing, ask (`ask_user_question`, all at once); do not barrel ahead just because a seed fired.
 
 ## 3. Three hard rules
