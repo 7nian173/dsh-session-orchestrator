@@ -1,6 +1,11 @@
 ---
 name: session-orchestrator
-description: 用会话编排插件（session-bridge）时的操作说明——人类说「建工作区」「注册好友」「给谁发信」「跳到某会话」时的正确做法、边界与措辞。只讲怎么用，不讲插件内部。
+description: "用会话编排插件（session-bridge）时的操作说明——人类说「建工作区」「注册好友」「给谁发信」「跳到某会话」时的正确做法、边界与措辞。只讲怎么用，不讲插件内部。"
+version: "0.3.1"
+license: CC-BY-NC-4.0
+metadata:
+  hermes:
+    tags: [mailbox, session, orchestration]
 ---
 
 # 会话编排插件 · 使用说明
@@ -160,6 +165,8 @@ DSH 归档一个会话后，它的名字立刻失效（`FRIEND_ARCHIVED`），�
 
 **你随时可以做的**：发信、注册（他明确要求时）、跳转、查列表。
 **他自己说过的就算同意**——他说「帮我建个工作区」，那就是同意了，不用再问一遍。
+
+---
 
 ## 7 命令的两个注意事项
 
