@@ -218,7 +218,9 @@ Both are adjustable in settings: protected directories can only be **extended**,
 
 The plugin ships a skill: **`session-orchestrator`**.
 
-What it does: when the assistant hears plain speech like "make me a workspace" or "tell the decision session about this", the skill tells it **which flow to run and where the boundaries are**.
+What it does: when the assistant hears plain speech like "make me a new workspace" or "tell the decision session about this", the skill tells it **which flow to run and where the boundaries are**.
+It explains **how to use the plugin, not how the plugin works** — an operating manual aimed at the assistant.
+
 The plugin works without it — the built-in hints already spell the intent out. With it, the assistant judges better and asks less.
 
 ### Why install it
@@ -237,7 +239,9 @@ Copy the `skills/session-orchestrator/` folder from the plugin directory into yo
 
 Refresh the page afterwards; if `session-orchestrator` shows up in the skill list, it is installed.
 
-**Not required.** If your assistant is already accurate, skip this section.
+**Not required**, and **the assistant will not install it on its own**. If it thinks the detailed guide would help, it asks you first; only then does it install.
+
+If your assistant is already accurate, skip this section.
 
 ## Use your own wording
 

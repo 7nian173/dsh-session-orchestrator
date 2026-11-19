@@ -147,6 +147,9 @@ It spells out "spoken request → which flow" in more detail, especially the `in
 
 **It runs with or without the skill installed**; with it you will ask far fewer irrelevant questions. When intent is unclear, read the skill first.
 
+That skill explains **how to use** the plugin; mechanisms and parameters live in this guide.
+**Never install this guide as a skill on your own** — when you need the fuller description, ask the human whether to install it first.
+
 ## 3. Three hard rules
 
 ### A reply is not an acknowledgement
