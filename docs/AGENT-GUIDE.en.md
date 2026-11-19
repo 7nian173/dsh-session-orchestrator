@@ -257,6 +257,59 @@ What that means for you as an agent:
 
 ---
 
+## 8.6 Do not hold a loop to "wait" — it will block all your mail
+
+This is a **causal chain**, not a style preference:
+
+```
+You hold a while(true) sleep / one long blocking tool call
+    ↓
+The host sees your session as "running"
+    ↓
+When a peer sends you a letter, targetBusy() is true → delivery is deferred, reason='target-busy'
+    ↓
+The letter goes into the held queue and waits busyHoldMs (default 3 minutes)
+    ↓
+You are still looping → past 3 minutes → block(), reason='busy-timeout'
+    ↓
+All your mail lands in 待办. The peer thinks you are working; you were just asleep.
+```
+
+**Measured** (2026-11-19): during one `sleep 900`, this session showed `running`
+on the host side for about 3 minutes, and every letter that arrived in that
+window was `deferred`.
+
+### What to do instead
+
+When you need to wait for something (a build, a peer's reply, observations to accumulate):
+
+1. **Estimate the work first** and pick a realistic completion time.
+2. Create **a single one-shot reminder** through the host's automation task, with
+   "what to do when it fires" written into the body.
+3. If it is not done when the reminder fires, **set the next one yourself**
+   (a wider interval is fine) rather than switching to a loop.
+
+### What not to do
+
+- **Holding a resident loop** (`while` + sleep). Besides blocking mail, it has a
+  subtler cost: when the session dies, that stretch of data is simply missing, and
+  **a gap is more misleading than wrong data** — it reads as "nothing happened".
+- **A blocking `sleep 900` tool call.** A human message interrupts it, so you look
+  stuck — and up to that point you were blocking mail anyway.
+- **Using OS scheduled tasks for second-level precision** (`schtasks` minimum is
+  1 minute). Not worth bending the architecture for.
+
+### If mail already got blocked
+
+- Do not panic: read `mail_inbox`, acknowledge each letter. `busy-timeout` letters
+  **can be reopened** (path `P>B>R>D`).
+- Need one through right now: send it with `urgent: true` — urgent mail bypasses the
+  busy state and arms no hold timer.
+- Tell the peer you are in a long task: send `S-PROGRESS` with an ETA instead of
+  leaving them waiting.
+
+---
+
 ## 9. Notification gating: nothing is pushed by default
 
 The plugin **does not push ordinary letters** into the receiver's dialogue. Only four cases are pushed:

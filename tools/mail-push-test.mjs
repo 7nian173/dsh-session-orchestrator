@@ -482,6 +482,15 @@ check(
   String(banner).slice(0, 40),
 )
 check('stepBanner 带积压时长', /积压/.test(String(banner)), String(banner).slice(0, 80))
+// 横幅必须带「别挂循环」的警告：这是 agent 每回合唯一必看的信箱文本，
+// 而「为等待挂循环 → 会话显示 running → 来信全被压成待办」这个坑
+// 只有在他还没挂上去之前提醒才有用。实测过这条因果链（sleep 900 期间
+// 会话连续显示 running 约 3 分钟，同期来信全部 deferred）。
+check(
+  'stepBanner 警告别挂循环',
+  /sleep|循环/.test(String(banner)) && /running|压成待办/.test(String(banner)),
+  String(banner).slice(-48),
+)
 await gateBox.ack({ mailId: 'M-20261118-9107', close: true })
 
 // 积压跨度：多封且时间分散时，要能看出「不是一批」
