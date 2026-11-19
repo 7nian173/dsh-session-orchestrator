@@ -6,6 +6,7 @@ const tmp = join(process.cwd(), '_tmp', 'mail-ws-test')
 
 
 
+
 await rm(tmp, { recursive: true, force: true })
 const wsFrom = join(tmp, 'ws-from')
 const wsTo = join(tmp, 'ws-to')
@@ -24,6 +25,20 @@ const cwdOf = async (sid) => (sid === 'session-from' ? wsFrom : sid === 'session
 const box = createMailbox({ ackTimeoutMs: 1000, service: (k) => (k === 'sessionController' ? controller : undefined), log: () => {}, cwdOf })
 
 const lines = []
+globalThis.__dshLines = lines
+
+// 崩了也要把已跑过的结果打出来：否则看起来像「测试没跑」而不是「测试失败」。
+// （实验室 agent-_lab-0e24 报过这个：saveNow 抛 EPERM 时 lines 一条都没输出。）
+const flushOnCrash = (label) => (error) => {
+  try {
+    console.log((globalThis.__dshLines || []).join('\n'))
+    console.log('\n[' + label + '] ' + ((error && error.stack) || String(error)))
+  } catch {}
+  process.exit(1)
+}
+process.on('uncaughtException', flushOnCrash('uncaughtException'))
+process.on('unhandledRejection', flushOnCrash('unhandledRejection'))
+
 let failed = 0
 const check = (n, ok, d) => { lines.push((ok ? 'PASS ' : 'FAIL ') + n + (d ? ' — ' + d : '')); if (!ok) failed++ }
 const readJson = async (p) => JSON.parse(await readFile(p, 'utf8'))
@@ -435,24 +450,50 @@ check('isSafeMailId 边界正确', isSafeMailId('M-20261119-0001') === true && i
 const okId = await guardBox.send({ owner: 'a', peer: 'b', type: 'S-PROGRESS', body: 'x', senderSessionId: 'S90', peerSessionId: 'S91', mailId: 'M-20261119-9999' })
 check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-20261119-9999', JSON.stringify(okId.error))
 
-// ── 回归：noteStep 不能把已 done 的信当成首次送达（实验室 2026-11-19 实测脏数据）──
+// ── 回归：noteStep 不能把已 done 的信当成首次送达 ──
+// 实验室（agent-_lab-0e24）2026-11-19 指出：之前这组用例的顺序是
+//   投卡 → 结案 → 再投卡
+// 而 deliveredAt 在第一次投卡时就已写入，旧代码的 `if (!letter.deliveredAt) continue`
+// 本来就会跳过 —— 把守卫删掉这条断言照样绿，测不到 bug。
+// 真实脏数据（M-0020/M-0021）的形状是：
+//   结案 → 卡才第一次进上下文（此时 deliveredAt 还是 null）
+// 所以顺序必须反过来，并且断言 deliveredAt 保持 null，而不是 status（两种情况下都是 done）。
 {
-  const regBox = createMailbox({ ackTimeoutMs: 60000, cwdOf: async () => 'C:\\reg', isArchived: async () => false, log: () => {}, service: () => undefined })
-  const sent = await regBox.send({ owner: 'R1', peer: 'R2', type: 'S-PROGRESS', body: 'reg', senderSessionId: 'SR1', peerSessionId: 'SR2', mailId: 'M-20261119-8801' })
-  // 先正常送达一次
-  await regBox.noteStep({ id: 'SR2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261119-8801〕' }] }])
-  // 结案
-  await regBox.ack({ mailId: 'M-20261119-8801', close: true })
-  const beforeDone = await regBox.status({ mailId: 'M-20261119-8801' })
-  const d1 = beforeDone.rows[0] && beforeDone.rows[0].deliveredAt
-  // 再来一次「回执标记进上下文」——不该改动任何东西
-  await regBox.noteStep({ id: 'SR2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261119-8801〕' }] }])
-  const afterDone = await regBox.status({ mailId: 'M-20261119-8801' })
-  const row = afterDone.rows[0] || {}
+  const wsReg = join(tmp, 'reg')
+  const regBox = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => wsReg,
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const REGID = 'M-20261119-8801'
+  await regBox.send({
+    owner: 'R1',
+    peer: 'R2',
+    type: 'S-PROGRESS',
+    body: 'reg',
+    senderSessionId: 'SR1',
+    peerSessionId: 'SR2',
+    mailId: REGID,
+  })
+  // ① 先结案（此时 deliveredAt 仍为 null —— 这是复现的必要条件）
+  await regBox.ack({ mailId: REGID, close: true })
+  // ② 卡这时才第一次进上下文：旧代码会把它当成首次送达并回填 deliveredAt
+  await regBox.noteStep({ id: 'SR2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + REGID + '〕' }] }])
+  const row = (await regBox.status({ mailId: REGID })).rows[0] || {}
+  let regLetter = {}
+  try {
+    const raw = JSON.parse(await readFile(join(wsReg, '.dsh-mail', '_letters.json'), 'utf8'))
+    const arr = raw.letters || raw
+    regLetter = (Array.isArray(arr) ? arr : Object.values(arr)).find((x) => x && x.id === REGID) || {}
+  } catch {
+    regLetter = {}
+  }
   check(
-    '已 done 的信不会被二次送达污染',
-    row.status === 'done' && row.toPath && row.readState === 'acknowledged',
-    JSON.stringify({ status: row.status, readState: row.readState, path: row.toPath }),
+    '已 done 的信不会被二次投递污染',
+    row.status === 'done' && !regLetter.deliveredAt,
+    JSON.stringify({ status: row.status, deliveredAt: regLetter.deliveredAt ?? null }),
   )
 }
 
