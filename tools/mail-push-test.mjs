@@ -138,6 +138,38 @@ const softPassed = await chSoft.send(chMail('P', 'Q', 'S8', 'S9', 'M-20261117-81
 check('过阈值 → 软释放放行', softPassed.ok === true && softPassed.released && softPassed.released.mailId === 'M-20261117-8101', JSON.stringify(softPassed.released))
 const softLedger = await readJson(join(wsCh, '.dsh-mail', '_ledger.json'))
 check('软释放留痕', (softLedger.events || []).some((e) => e.note === 'backpressure:soft-release' && e.mail_id === 'M-20261117-8101'), '')
+// ⚠️ 上面那条在本机几乎总是绿，因为 appendLedger 恰好赶在 readJson 之前落盘。
+// 真正要锁的是「send() 返回时留痕已在磁盘上」这个契约——否则审计证据可能丢。
+// 这里立刻（不 sleep）读，且连做几次，把「不 await」的窗口放大。
+{
+  let immediateMisses = 0
+  for (let round = 0; round < 5; round += 1) {
+    // 每轮用独立工作区：共用同一个目录时，多个 mailbox 实例的
+    // read-modify-write 会互相覆盖 ledger，那是测试自身的问题，
+    // 会把它误报成「产品丢留痕」。
+    const immWs = join(tmp, 'imm-' + round)
+    await ensureWorkspaceBox(immWs)
+    const immBox = createMailbox({
+      ackTimeoutMs: 600000,
+      cwdOf: async () => immWs,
+      cwds: async () => [immWs],
+      isArchived: async () => false,
+      log: () => {},
+      service: () => undefined,
+      backpressureReleaseMs: 40,
+    })
+    const base = 'M-20261118-82' + String(round).padStart(2, '0')
+    await immBox.send(chMail('IM', 'IN', 'S82', 'S83', base))
+    await sleep(60) // 越过 backpressureReleaseMs
+    const passed = await immBox.send(chMail('IM', 'IN', 'S82', 'S83', base.slice(0, -1) + '9'))
+    if (!passed.ok) continue
+    // 关键：send() 刚返回，**不等**，立刻读 ledger
+    const immLedger = await readJson(join(immWs, '.dsh-mail', '_ledger.json'))
+    const found = (immLedger.events || []).some((e) => e.note === 'backpressure:soft-release' && e.mail_id === base)
+    if (!found) immediateMisses += 1
+  }
+  check('send() 返回时软释放留痕已落盘（不依赖时序）', immediateMisses === 0, JSON.stringify({ immediateMisses }))
+}
 
 // ── 加急撤销（S-EXPIRE）：对事不对人、绕过忙与在途 ──
 const orig = await chBox.send(chMail('V', 'W', 'S31', 'S30', 'M-20261118-9001'))
