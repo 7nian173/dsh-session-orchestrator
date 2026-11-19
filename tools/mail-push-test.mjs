@@ -976,5 +976,66 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 }
 
+// ── 回归：deliveredAt 被合法清空后，超时窗口仍不能被重开 ──
+// 实验室按真实链路复现：armStaleWatch → 催收卡投出 → 投出成功后
+// `letter.deliveredAt = null`（等新卡被消费）→ noteStep 的
+// `if (letter.deliveredAt) continue` 闸门失效 → deadline 被重新算。
+// 修法：审计字段 firstDeliveredAt 只增不改，闸门改用它；
+// 且 deadline 只在**没有合法值**时才计算。
+{
+  const fdBox = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'fd'),
+    cwds: async () => [join(tmp, 'fd')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const FID = 'M-20261119-8103'
+  await fdBox.send({
+    owner: 'F1', peer: 'F2', type: 'S-PROGRESS', body: 'first-delivered',
+    senderSessionId: 'SF1', peerSessionId: 'SF2', mailId: FID,
+  })
+  const fdLetters = join(tmp, 'fd', '.dsh-mail', '_letters.json')
+  const fBefore = await readJson(fdLetters)
+  const fTarget = (fBefore.letters || []).find((e) => e.id === FID)
+
+  // 第一轮：正常送达 → firstDeliveredAt 与 deadline 都该落定
+  await fdBox.noteStep({ id: 'SF2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + FID + '〕' }] }])
+  const fDelivered = (await readJson(fdLetters)).letters.find((e) => e.id === FID)
+  const firstDeadline = fDelivered && fDelivered.deadline
+  check(
+    '首次送达写入 firstDeliveredAt',
+    Boolean(fDelivered && fDelivered.firstDeliveredAt),
+    JSON.stringify({ firstDeliveredAt: fDelivered && fDelivered.firstDeliveredAt }),
+  )
+
+  // 模拟催收卡投出：deliveredAt 被清空（真实代码在 mail.js 里就是这么做的）
+  const fRound2 = await readJson(fdLetters)
+  const fTarget2 = (fRound2.letters || []).find((e) => e.id === FID)
+  if (fTarget2) {
+    fTarget2.deliveredAt = null
+    await writeFile(fdLetters, JSON.stringify(fRound2, null, 2), 'utf8')
+  }
+  await new Promise((r) => setTimeout(r, 30))
+
+  // 第二轮：标记再进一次 → deadline 不该被推迟
+  const fdBox2 = createMailbox({
+    ackTimeoutMs: 60000,
+    cwdOf: async () => join(tmp, 'fd'),
+    cwds: async () => [join(tmp, 'fd')],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await fdBox2.noteStep({ id: 'SF2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + FID + '〕' }] }])
+  const fAfter = (await readJson(fdLetters)).letters.find((e) => e.id === FID)
+  check(
+    'deliveredAt 被清空后 deadline 不被推迟',
+    fAfter && fAfter.deadline === firstDeadline,
+    JSON.stringify({ before: firstDeadline, after: fAfter && fAfter.deadline, firstDeliveredAt: fAfter && fAfter.firstDeliveredAt }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
