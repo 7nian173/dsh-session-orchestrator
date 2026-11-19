@@ -352,11 +352,12 @@ The plugin matches these (the word 工作区 must appear), and the assistant the
 ### Or just use the command
 
 ```
-/new-workspace my-project
 /new-workspace my-project D:\work\myproj
 ```
 
-No directory means it asks; no project name means it prompts. Paths with spaces are parsed as one argument.
+**With both a project name and a directory, the command creates the workspace right away** — no back-and-forth with the assistant. Paths with spaces are parsed as one argument.
+
+If something is missing it shows you the correct format plus a line you can copy to the assistant; hand it over and the assistant finishes the job.
 
 **The command and the phrasing are two equivalent routes** to the same action: register a DSH workspace and open one session. There is no third interpretation.
 
