@@ -16,7 +16,8 @@ After this you should know: how to install, what the tools are, how to call them
 > still rejected** — because it is a settings-level switch and verbal authorisation cannot change it.
 > It only looked at the settings table after its third failure.
 >
-> **These two tables would have saved those two failures.**
+> *(The above is a record of one real incident. Whether "reading these two sections first"
+> would have prevented it has not been validated on an independent agent.)*
 
 ---
 
@@ -457,8 +458,10 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 >
 > **Rule of thumb**: if the human has clearly said it and you are sure they understood, and the call
 > still returns this code — **stop asking the human. Say: "you need to enable allowAgentCreateSession
-> under Settings → Session Orchestration → Security".** Repeatedly asking just makes them think you
-> did not understand.
+> under Settings → Session Orchestration → Security".**
+>
+> *("Repeatedly asking makes them think you did not understand" is an interpretation of the incident
+> above, not an independently validated conclusion.)*
 >
 > ### Why you must not work around it
 >

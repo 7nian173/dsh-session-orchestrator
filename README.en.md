@@ -222,9 +222,9 @@ Because the alternative is to **push the full body straight into the peer's dial
 
 | Problem | Consequence |
 |---|---|
-| **Full body lands in context** | One 3000-character letter is roughly 5000 tokens, billed to the receiver |
-| **It interrupts whatever the peer is doing** | The peer may be mid-code, mid-test; a long body derails it |
-| **Nothing to trace once blocked** | No file on disk means finding a blocked letter means scrolling chat history |
+| **Full body lands in context** | One 3000-character letter is roughly 5000 tokens at 1.6 tokens/char, billed to the receiver |
+| **It interrupts whatever the peer is doing** | The peer may be mid-code, mid-test; a long body competes for its attention (**not quantified**) |
+| **Nothing to trace once blocked** | No file on disk means finding a blocked letter means scrolling chat history (**there is an incident record** for this one) |
 
 So the plugin writes to disk and sends only an index line: **the body stays on disk, the peer decides when to read it.** The cost of that choice is that it must create a directory in the peer's workspace.
 
@@ -235,6 +235,9 @@ That file covers total body volume, token estimates, the split between carrier o
 body cost, and what "no disk" would cost under the same assumptions.
 **Those numbers describe only the configuration we tested** — a different model, provider or
 task mix will shift them, so measure your own setup.
+
+**That file ends with a table marking which statements are measured and which are inferred.**
+In particular: **"pushing the body directly costs more" is an inference — no A/B experiment was run.**
 
 ### The mailbox is not proof of identity (important)
 
