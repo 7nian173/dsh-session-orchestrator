@@ -1327,5 +1327,76 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   }
 }
 
+// ── 回归：同一封信跨两个工作区各存一份副本时，ack 必须两侧一起更新 ──
+// 使用方 lead 报的缺陷 2（比 S-ACK 断链更危险）：M-20261117-0066 在
+// E 侧 delivered、D 侧 done，ack 返回 done 但待办里还在。
+//
+// 三处配合造成的：
+//   ① loadOne 合并时 `dup[key] = value` 把 `_cwd` 也盖掉，只留胜出那侧的
+//   ② saveNow 按单值 `_cwd` 分组，只写一侧
+//   ③ ack 命中已 done 就早退，返回 cwd:null 什么都不写
+//
+// 修法：`_cwds`（复数）记录所有副本所在工作区，loadOne 合并时并集，
+// saveNow 每个工作区都写，且 `_cwds` 本身要持久化（否则重启后又退化成单值）。
+{
+  const wsA = join(tmp, 'xws-a')
+  const wsB = join(tmp, 'xws-b')
+  await ensureWorkspaceBox(wsA)
+  await ensureWorkspaceBox(wsB)
+  const XID = 'M-20261120-9601'
+
+  // 在 A 侧造一封 done 的信
+  const boxA = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => wsA,
+    cwds: async () => [wsA],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await boxA.send({
+    owner: 'XA', peer: 'XB', type: 'S-PROGRESS', body: 'cross-workspace',
+    senderSessionId: 'SXA', peerSessionId: 'SXB', mailId: XID,
+  })
+  await boxA.ack({ mailId: XID, close: true })
+
+  // 在 B 侧造同一 id 的「低状态」副本（模拟另一侧还停在 delivered）
+  const aRaw = await readJson(join(wsA, '.dsh-mail', '_letters.json'))
+  const aLetter = (aRaw.letters || []).find((e) => e.id === XID)
+  check('跨区测试的前置：A 侧是 done', aLetter && aLetter.status === 'done', JSON.stringify({ status: aLetter && aLetter.status }))
+  if (aLetter) {
+    const bCopy = { ...aLetter, status: 'delivered', ackedAt: null, deliveredAt: new Date().toISOString() }
+    delete bCopy._cwds
+    bCopy._cwd = wsB
+    await writeFile(join(wsB, '.dsh-mail', '_letters.json'), JSON.stringify({ letters: [bCopy], seq: aRaw.seq || {} }, null, 2), 'utf8')
+  }
+
+  // 从同时能看到两个工作区的实例 ack（force：绕过 already 早退）
+  const boxX = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => wsA,
+    cwds: async () => [wsA, wsB],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await boxX.status({})
+  const acked = await boxX.ack({ mailId: XID, close: true, force: true, receipt: '两侧同步' })
+  check('跨区 ack 成功', acked.ok === true, JSON.stringify(acked.error || null))
+
+  const aAfter = (await readJson(join(wsA, '.dsh-mail', '_letters.json'))).letters.find((e) => e.id === XID)
+  const bAfter = (await readJson(join(wsB, '.dsh-mail', '_letters.json'))).letters.find((e) => e.id === XID)
+  check(
+    '跨区 ack 两侧都更新（不再只写一侧）',
+    aAfter && bAfter && aAfter.status === 'done' && bAfter.status === 'done',
+    JSON.stringify({ a: aAfter && aAfter.status, b: bAfter && bAfter.status }),
+  )
+  check(
+    '_cwds 已持久化（否则重启后退化成单值）',
+    Array.isArray(bAfter && bAfter._cwds) && (bAfter._cwds || []).length >= 2,
+    JSON.stringify({ cwds: bAfter && bAfter._cwds }),
+  )
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
