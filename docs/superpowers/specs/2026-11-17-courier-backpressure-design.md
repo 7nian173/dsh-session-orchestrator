@@ -53,7 +53,7 @@ pending → pushed → delivered → acked → done
 ```json
 {
   "seq": 12,
-  "mailId": "M-20261117-0031",
+  "mailId": "M-EXAMPLE-0001",
   "sessionId": "session-x",
   "side": "to",
   "form": "a",
@@ -86,10 +86,10 @@ pending → pushed → delivered → acked → done
 ### 形态 A：催收（收信方，逐封）
 
 ```
-〔信箱·待收〕M-20261117-0031
-来自 lead · S-PROGRESS · 位置：…\envelope\M-20261117-0031.to.md（2.1 KB）
+〔信箱·待收〕M-EXAMPLE-0001
+来自 lead · S-PROGRESS · 位置：…/envelope/M-EXAMPLE-0001.to.md（2.1 KB）
 状态：待办 B —— 这封还没进过你的任何一轮
-（回信带上 〔信箱·M-20261117-0031〕 即结案）
+（回信带上 〔信箱·M-EXAMPLE-0001〕 即结案）
 ```
 
 ### 形态 B：摘要（发信方，聚合）

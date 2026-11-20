@@ -119,7 +119,7 @@ FatFish-Whisper-workspace-b2b6
 <工作区目录名>-<会话ID后四位>
 ```
 
-例如工作区 `D:\dshdata\本地`、会话 `session-...7e5c91e` → **`本地-c91e`**。
+例如工作区 `D:\projects\my-app`、会话 `session-...7e5c91e` → **`my-app-c91e`**。
 
 - **工作区目录名这一段不能省**。同一工作区里多个会话可能只差后四位，跨工作区只能靠前缀区分。
 - 后四位撞车（同一工作区极少见）会自动补 `-2`、`-3`。
@@ -141,8 +141,8 @@ FatFish-Whisper-workspace-b2b6
 | **`/register-peer`** | 把**别人**加进好友表并命名 |
 
 ```
-/register-me 本地-c91e
-/register-peer Super-agent session-42635e1a-0089-425f-9441-7c9b1ffc8431 决策
+/register-me my-app-c91e
+/register-peer my-project session-...c91e 决策
 ```
 
 **它能看到哪些会话，取决于「跨工作区放行」这个开关**：
@@ -157,7 +157,7 @@ FatFish-Whisper-workspace-b2b6
 `/register-peer` **不要求格式**，给多少算多少：
 
 ```
-/register-peer session-42635e1a-0089-425f-9441-7c9b1ffc8431
+/register-peer session-...c91e
 /register-peer Super-agent
 /register-peer session-42635e1a-… 决策
 ```
@@ -358,7 +358,7 @@ skill 直接把边界写死：本插件只负责**登记 DSH 工作区并开会�
 | 位置 | 说明 |
 |---|---|
 | `<工作区>/.dsh/skills/` | 只在这个工作区生效 |
-| `D:\dshdata\skills/` | 全局生效（路径按你的 DSH_HOME 调整） |
+| `$DSH_HOME/skills/` | 全局生效 |
 
 复制完刷新一下页面，在 skill 列表里能看到 `session-orchestrator` 就装好了。
 

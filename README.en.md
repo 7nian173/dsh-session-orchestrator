@@ -118,7 +118,7 @@ When the plugin creates a session for you it registers automatically, with a fix
 <workspace folder name>-<last 4 of sessionId>
 ```
 
-For workspace `D:\dshdata\本地` and session `session-...7e5c91e` → **`本地-c91e`**.
+For workspace `D:\projects\my-app` and session `session-...7e5c91e` → **`my-app-c91e`**.
 
 - **The workspace segment is never dropped.** Sessions in one workspace can differ only in the last four characters; across workspaces only the prefix distinguishes them.
 - A collision on the last four (rare within one workspace) appends `-2`, `-3`.
@@ -140,8 +140,8 @@ Two commands, two different jobs:
 | **`/register-peer`** | Add **someone else** to the friends table and name them |
 
 ```
-/register-me 本地-c91e
-/register-peer Super-agent session-42635e1a-0089-425f-9441-7c9b1ffc8431 决策
+/register-me my-app-c91e
+/register-peer my-project session-...c91e 决策
 ```
 
 **Which sessions it can see depends on the cross-workspace switch**:
@@ -156,7 +156,7 @@ This is the **same switch** that decides whether you may send letters to another
 `/register-peer` **has no fixed format** — give whatever you have:
 
 ```
-/register-peer session-42635e1a-0089-425f-9441-7c9b1ffc8431
+/register-peer session-...c91e
 /register-peer Super-agent
 /register-peer session-42635e1a-… 决策
 ```
@@ -356,7 +356,7 @@ Copy the `skills/session-orchestrator/` folder from the plugin directory into yo
 | Location | Scope |
 |---|---|
 | `<workspace>/.dsh/skills/` | this workspace only |
-| `D:\dshdata\skills/` | global (adjust to your DSH_HOME) |
+| `$DSH_HOME/skills/` | global |
 
 Refresh the page afterwards; if `session-orchestrator` shows up in the skill list, it is installed.
 

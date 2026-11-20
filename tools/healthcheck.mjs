@@ -33,6 +33,10 @@ run('断言 mail-push-test', [join(root, 'tools/mail-push-test.mjs')])
 // 授权窗口翻页：这段逻辑失效是静默的（长会话里人类自己的请求被门控拦掉），
 // 必须进自检，否则单靠 mail-push-test 全绿也发现不了。
 run('断言 permit-window-test', [join(root, 'tools/permit-window-test.mjs')])
+// 隐私与可移植性：扫本机绝对路径、真实会话/信件 id、主机名。
+// 为什么进自检：这类东西一旦进了文档就跟着发布出去，而且没人会回头再看。
+// 实测（2026-11-20）：一处本机路径跟着 Release 正文和 tag message 一起上了 GitHub。
+run('隐私本机硬编码', [join(root, 'tools/privacy-check.mjs')])
 
 let manifestOk = true
 try {

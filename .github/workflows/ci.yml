@@ -26,6 +26,13 @@ jobs:
       - name: self-check suite
         run: node tools/mail-push-test.mjs
 
+      # 隐私与可移植性：本机绝对路径、真实会话/信件 id、主机名。
+      # 放在 CI 里的理由：本地检查靠人记得跑，而这类东西一旦进了文档
+      # 就跟着发布出去，且没人会回头再看。2026-11-20 实测——一处本机路径
+      # 跟着 Release 正文和 tag message 一起上了 GitHub，事后才发现。
+      - name: privacy (no local hardcoding)
+        run: node tools/privacy-check.mjs
+
       - name: manifest
         run: |
           node -e "
