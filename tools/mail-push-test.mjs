@@ -1218,5 +1218,43 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 }
 
+// ── 回归：从没被推送过的信，发信方查得到（不该静默失败）──
+// 使用方实测：连续 10 封正文 300-1100 字的 S-ACK 全部 notify-gated，
+// readAt 全为 none。发信方以为发了，收信方永远收不到，双方都不报错。
+// 这个失败极难自证——收方主动翻信箱能翻到内容，反而掩盖了推送失败。
+{
+  const sfWs = join(tmp, 'silent-filed')
+  await ensureWorkspaceBox(sfWs)
+  const sfBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => sfWs,
+    cwds: async () => [sfWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const LONG = 'x'.repeat(800)
+  const sent = await sfBox.send({
+    owner: 'SF1', peer: 'SF2', type: 'S-ACK', ackOf: 'M-20261120-9101',
+    body: LONG, senderSessionId: 'SSF1', peerSessionId: 'SSF2', mailId: 'M-20261120-9102',
+  })
+  check('超长 S-ACK 不拒发（会打断已跑通的工作流）', sent.ok === true, JSON.stringify(sent.error || null))
+  check(
+    '超长 S-ACK 发送时给警告',
+    Boolean(sent.warning) && sent.warning.chars === 800,
+    JSON.stringify(sent.warning || null),
+  )
+
+  const st = await sfBox.status({ mailId: 'M-20261120-9102' })
+  const row = (st.rows || [])[0] || {}
+  check('status 标出「从未推送过」', row.silentlyFiled === true, JSON.stringify({ silentlyFiled: row.silentlyFiled, reason: row.silentReason }))
+  check('status 给出正文长度', row.bodyChars === 800, String(row.bodyChars))
+  check('status 给出可读的 hint', typeof row.silentHint === 'string' && /没读到|没推到|不会被推送/.test(row.silentHint), String(row.silentHint))
+
+  const ls = await sfBox.list({ owner: 'SF1' })
+  const lrow = (ls.rows || []).find((r2) => r2.mailId === 'M-20261120-9102') || {}
+  check('list 也标出「从未推送过」', lrow.silentlyFiled === true, JSON.stringify({ silentlyFiled: lrow.silentlyFiled }))
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
