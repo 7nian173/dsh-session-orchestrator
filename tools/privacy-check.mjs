@@ -17,12 +17,73 @@
  * 已经被 healthcheck 调用，所以 push 前会自动跑。
  */
 import { readFile, readdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { join, dirname, relative, extname } from 'node:path'
+import { existsSync, readFileSync as readFileSyncSync } from 'node:fs'
+import { join, dirname, relative, extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const root = dirname(here)
+
+// ⚠️ 扫描根默认取 **cwd**，不是脚本所在目录的父目录。
+//
+// 使用方 lead 实测踩到：他从自己的仓跑 `node <别处>/privacy-check.mjs`，
+// 脚本按 `dirname(here)` 把 root 算成了脚本所在的目录，扫的是别人的仓
+// （3872 处全是 session-bridge 的会话记录），而他自己的仓一处没扫。
+//
+// 正确语义是「检查当前这个仓库」，所以：
+//   1. 优先 --root 显式指定
+//   2. 否则用 process.cwd()
+//   3. 只有当 cwd 里没有 .git 时，才退回脚本父目录（兼容旧用法）
+const resolveRoot = () => {
+  const argv = process.argv.slice(2)
+  const i = argv.indexOf('--root')
+  if (i >= 0 && argv[i + 1]) return resolve(argv[i + 1])
+  const cwd = process.cwd()
+  // cwd 是 git 仓库 → 就用它；否则退回脚本父目录（在仓库内的常规调用）
+  if (existsSync(join(cwd, '.git'))) return cwd
+  return dirname(here)
+}
+const root = resolveRoot()
+
+// --scope / .privacyignore：只扫「会被发布的东西」。
+//
+// 使用方 lead 指出的关键区分：**「含本机路径」和「会外发」是两件事。**
+// 他们的 `_施工记录/` 里有 319 处命中，但那是**证据**——
+// 信件 id 是证据的一部分，脱敏就破坏了它作为证据的价值。
+// 而那个仓从来没有远端，这些内容永远不会外发。
+//
+// 判据不是「文件里有没有本机路径」，是「这个目录会不会被发布」。
+// 这和 docsOnly 是同一个道理：不看它长什么样，看它为什么在这。
+const loadScope = () => {
+  const argv = process.argv.slice(2)
+  const patterns = []
+
+  // 命令行：--scope a/b --scope c/
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--scope' && argv[i + 1]) patterns.push(argv[i + 1])
+  }
+
+  // 文件：.privacyignore（每行一条，支持 # 注释与结尾 /）
+  try {
+    const text = readFileSyncSync(join(root, '.privacyignore'), 'utf8')
+    for (const raw of text.split('\n')) {
+      const line = raw.trim()
+      if (!line || line.startsWith('#')) continue
+      patterns.push(line)
+    }
+  } catch {
+    // 没有这个文件就是没配 scope
+  }
+
+  return patterns.map((p2) => p2.replace(/\\/g, '/').replace(/\/+$/, ''))
+}
+const scopePatterns = loadScope()
+
+/** 路径是否落在 scope 之外（scope 里写的是「要扫的」，没写就是全扫）。 */
+const inScope = (relPath) => {
+  if (scopePatterns.length === 0) return true
+  const normalized = relPath.replace(/\\/g, '/')
+  return scopePatterns.some((entry) => normalized === entry || normalized.startsWith(entry + '/'))
+}
 
 /** 只扫会被发布/公开的东西 */
 const SCAN_EXT = new Set(['.md', '.js', '.mjs', '.json', '.yml', '.yaml', '.html', '.txt'])
@@ -202,8 +263,11 @@ const main = async () => {
   const soft = []
 
   for (const file of files) {
+    const rel = relative(root, file).replace(/\\/g, '/')
     // 把自己排除掉：规则本身写着这些模式
-    if (relative(root, file).replace(/\\/g, '/') === 'tools/privacy-check.mjs') continue
+    if (rel === 'tools/privacy-check.mjs') continue
+    // scope 之外的不扫（那些内容不会外发）
+    if (!inScope(rel)) continue
     let text
     try {
       text = await readFile(file, 'utf8')
@@ -229,7 +293,8 @@ const main = async () => {
     }
   }
 
-  console.log('隐私与可移植性检查（扫描 ' + files.length + ' 个文件）')
+  const scopeNote = scopePatterns.length > 0 ? '，scope 限定 ' + scopePatterns.join(' / ') : ''
+  console.log('隐私与可移植性检查（扫描 ' + files.length + ' 个文件' + scopeNote + '）')
 
   // git 载体（commit / tag）——工作树干净也查不到这些东西
   const carrierHits = await scanGitCarriers()
