@@ -1,4 +1,9 @@
 _tmp/
+# 根目录下的一次性补丁/探针脚本（_tmp 前缀）。用 Python 写是为了处理中文与转义，
+# 但它不属于插件；之前三个 .py 被误提交，已从索引移除。
+_tmp_*.py
+_tmp_*.mjs
+_tmp*
 *.tgz
 node_modules/
 *.log
