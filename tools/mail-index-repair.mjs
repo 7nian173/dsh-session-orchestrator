@@ -260,10 +260,26 @@ if (logTo && !dryRun && (changes.length > 0 || statusFilled.length > 0)) {
   if (statusFilled.length > 0) parts.push('补 ' + statusFilled.length + ' 条 status')
   if (changes.length > 0) parts.push('修 ' + changes.length + ' 处 path')
   const line = [new Date().toISOString(), 'mail-index-repair' + (statusOnly ? ' --status-only' : ''), basename(cwd), parts.join(' + ')].join(' | ')
+  // ⚠️ 写失败必须报错退出，不能静默。
+  //
+  // 使用方 lead 的反驳成立：我原来在「静默失败」和「自动建目录」之间选，
+  // 两个都不好。第三选项是**报错退出**——路径写错时立刻知道。
+  //
+  // 理由（他今天学到的）：**「静默失败」正是我们踩了一整天的那个形状**——
+  // S-ACK 不推送、silentlyFiled、.privacyignore 只扫不排除、_index.json 没 status。
+  // 共同点是「不是坏了，是用起来会得到结果，而结果是错的」。
+  //
+  // 而 --log-to 的作用恰恰是**留痕**。一个会静默丢痕的留痕机制比没有更糟，
+  // 因为你会以为记了。
+  //
+  // 退出码 4 与口径自检的 3 区分开。
   try {
     await appendFile(resolve(logTo), line + '\n', 'utf8')
     console.log('施工记录已追加:', logTo)
   } catch (error) {
-    console.error('写施工记录失败:', (error && error.message) || String(error))
+    console.error('✗ --log-to 写入失败:', logTo, '(' + ((error && error.code) || (error && error.message) || String(error)) + ')')
+    console.error('  这次改动已经写盘，但**没有留下施工记录**。修好路径后请手工补记这一行：')
+    console.error('  ' + line)
+    process.exitCode = 4
   }
 }

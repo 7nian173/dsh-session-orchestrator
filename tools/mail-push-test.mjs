@@ -1513,6 +1513,29 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
   check('line 正整数保留', byPath['good.md'] === 35, String(byPath['good.md']))
 
+  // ③c evidence 去重：使用方实测收到过一封带两条完全相同 path 的信
+  // （M-20261120-0291），「看的时候愣了一下」。重复的 evidence 是噪音。
+  // 判据是 path + line 组合，不是只用 path —— 同文件不同行是不同证据。
+  await evBox.send({
+    owner: 'EV7', peer: 'EV2', type: 'R-ALERT', body: 'evidence 去重',
+    senderSessionId: 'SEV7', peerSessionId: 'SEV2', mailId: 'M-20261120-9906',
+    evidence: [
+      { path: 'dup.js' },
+      { path: 'dup.js' },
+      { path: 'dup.js', line: 10 },
+      { path: 'dup.js', line: 10 },
+      { path: 'dup.js', line: 20 },
+    ],
+  })
+  const dupRaw = await readJson(join(evWs, '.dsh-mail', '_letters.json'))
+  const dupLetter = (dupRaw.letters || []).find((e) => e.id === 'M-20261120-9906')
+  check('evidence 去重：5 条 → 3 条', (dupLetter && dupLetter.evidence && dupLetter.evidence.length) === 3, JSON.stringify(dupLetter && dupLetter.evidence))
+  check(
+    'evidence 去重保留「同文件不同行」',
+    (dupLetter.evidence || []).some((e) => e.line === 10) && (dupLetter.evidence || []).some((e) => e.line === 20),
+    JSON.stringify(dupLetter.evidence),
+  )
+
   // ④ 非 R-* 类型无证据时不写 none（避免噪音）
   await evBox.send({
     owner: 'EV5', peer: 'EV2', type: 'S-PROGRESS', body: '进度通知',
