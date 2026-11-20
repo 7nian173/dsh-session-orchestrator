@@ -1398,5 +1398,86 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 }
 
+// ── evidence：让「信里的技术断言指向可 diff 原文」变成可传可查 ──
+// 使用方报的真实事故：复核者转发上游结论时，去自己库里找到一个「像的」文件，
+// 把上游给的路径换成了自己的。转发与转述在动作上一样，而重写后**无法 diff**。
+//
+// 设计要点（我否掉了使用方的「词频打 unverified_claims 标记」）：
+// 实测发现一封认真写的技术信里「实测/确认/验证」大多在描述方法而非断言结论，
+// 按词频标记会让每封信都被标——标记一旦总是出现就等于没有标记。
+// 所以只做「可传 + 可查 + 如实记录」，不做自动判定。
+{
+  const evWs = join(tmp, 'evidence')
+  await ensureWorkspaceBox(evWs)
+  const evBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => evWs,
+    cwds: async () => [evWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+
+  // ① 带证据：落盘 + 计数 + 信封头写条数
+  const withEv = await evBox.send({
+    owner: 'EV1', peer: 'EV2', type: 'R-ALERT', body: '带证据的答复',
+    senderSessionId: 'SEV1', peerSessionId: 'SEV2', mailId: 'M-20261120-9901',
+    evidence: [{ path: 'D:/x/核-口径.md', line: 35 }, { path: 'D:/x/另.md' }],
+  })
+  check('evidence 不影响发送', withEv.ok === true, JSON.stringify(withEv.error || null))
+
+  const evRaw = await readJson(join(evWs, '.dsh-mail', '_letters.json'))
+  const evLetter = (evRaw.letters || []).find((e) => e.id === 'M-20261120-9901')
+  check(
+    'evidence 落盘（之前会被白名单静默丢弃）',
+    Array.isArray(evLetter && evLetter.evidence) && evLetter.evidence.length === 2,
+    JSON.stringify(evLetter && evLetter.evidence),
+  )
+
+  const evSt = await evBox.status({ mailId: 'M-20261120-9901' })
+  const evRow = (evSt.rows || [])[0] || {}
+  check('status 报 evidenceCount', evRow.evidenceCount === 2, String(evRow.evidenceCount))
+  check('带证据时 evidenceMissing 为 false', evRow.evidenceMissing === false, String(evRow.evidenceMissing))
+
+  const evEnv = await readFile(join(evWs, '.dsh-mail', 'envelope', 'M-20261120-9901.to.md'), 'utf8')
+  check('信封头写 evidence 条数', /^evidence: 2$/m.test(evEnv), (evEnv.match(/^evidence:.*$/m) || [''])[0])
+
+  // ② R-* 但不带证据：如实记 none，不判价值
+  await evBox.send({
+    owner: 'EV3', peer: 'EV2', type: 'R-ALERT', body: '没有证据的答复',
+    senderSessionId: 'SEV3', peerSessionId: 'SEV2', mailId: 'M-20261120-9902',
+  })
+  const noneEnv = await readFile(join(evWs, '.dsh-mail', 'envelope', 'M-20261120-9902.to.md'), 'utf8')
+  check('R-* 无证据时信封头写 none', /^evidence: none$/m.test(noneEnv), (noneEnv.match(/^evidence:.*$/m) || [''])[0])
+
+  const noneSt = await evBox.status({ mailId: 'M-20261120-9902' })
+  const noneRow = (noneSt.rows || [])[0] || {}
+  check('R-* 无证据时 evidenceMissing 为 true', noneRow.evidenceMissing === true, String(noneRow.evidenceMissing))
+
+  // ③ 形状校验：这是来自队列的任意 JSON，必须过滤
+  await evBox.send({
+    owner: 'EV4', peer: 'EV2', type: 'R-ALERT', body: '形状校验',
+    senderSessionId: 'SEV4', peerSessionId: 'SEV2', mailId: 'M-20261120-9903',
+    evidence: [{ path: 'ok.md', line: 10 }, { path: '' }, { path: 'noline.md', line: 'abc' }, { line: 5 }],
+  })
+  const shapeRaw = await readJson(join(evWs, '.dsh-mail', '_letters.json'))
+  const shapeLetter = (shapeRaw.letters || []).find((e) => e.id === 'M-20261120-9903')
+  const shape = shapeLetter && shapeLetter.evidence
+  check('evidence 形状校验：空 path 被过滤', Array.isArray(shape) && shape.length === 2, JSON.stringify(shape))
+  check(
+    'evidence 形状校验：非数字 line 变 null',
+    Array.isArray(shape) && shape[1] && shape[1].line === null,
+    JSON.stringify(shape && shape[1]),
+  )
+
+  // ④ 非 R-* 类型无证据时不写 none（避免噪音）
+  await evBox.send({
+    owner: 'EV5', peer: 'EV2', type: 'S-PROGRESS', body: '进度通知',
+    senderSessionId: 'SEV5', peerSessionId: 'SEV2', mailId: 'M-20261120-9904',
+  })
+  const spEnv = await readFile(join(evWs, '.dsh-mail', 'envelope', 'M-20261120-9904.to.md'), 'utf8')
+  check('非 R-* 类型无证据时不写 evidence 行', !/^evidence:/m.test(spEnv), (spEnv.match(/^evidence:.*$/m) || ['(无)'])[0])
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
