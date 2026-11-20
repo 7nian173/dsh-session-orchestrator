@@ -1639,6 +1639,41 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
     String(after['M-20261120-9972'].status),
   )
   check('补齐后不再有 undefined', Object.values(after).every((e) => e.status !== undefined), String(Object.values(after).filter((e) => e.status === undefined).length))
+
+  // 「只有一侧」的孤儿：使用方实测 96 条里 82 条是 `R/?`（只有 from 侧有记录）。
+  // 如果要求「两侧都满足」才判，这 82 条会全落 unknown —— 而它们其实可判。
+  {
+    const oneSideWs = join(tmp, 'one-side-orphan')
+    await ensureWorkspaceBox(oneSideWs)
+    const oneSideIndex = join(oneSideWs, '.dsh-mail', '_index.json')
+    await writeFile(
+      oneSideIndex,
+      JSON.stringify(
+        {
+          'M-20261120-9981': { type: 'S-PROGRESS', from: 'A', to: 'B', sides: { from: { code: 'R', path: 'A>R' } } },
+          'M-20261120-9982': { type: 'S-PROGRESS', from: 'A', to: 'B', sides: { to: { code: 'B', path: 'P>B' } } },
+          'M-20261120-9983': { type: 'S-PROGRESS', from: 'A', to: 'B', sides: { from: { code: 'D', path: 'A>D' }, to: { code: 'E', path: 'P>E' } } },
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    )
+    const oneBox = createMailbox({
+      ackTimeoutMs: 600000,
+      cwdOf: async () => oneSideWs,
+      cwds: async () => [oneSideWs],
+      isArchived: async () => false,
+      log: () => {},
+      service: () => undefined,
+    })
+    await oneBox.status({})
+    await oneBox.sweepAtStart()
+    const after2 = await readJson(oneSideIndex)
+    check('只有 from 侧 R → delivered（不是 unknown）', after2['M-20261120-9981'].status === 'delivered', String(after2['M-20261120-9981'].status))
+    check('只有 to 侧 B → blocked', after2['M-20261120-9982'].status === 'blocked', String(after2['M-20261120-9982'].status))
+    check('任一侧 E → expired（压过 done）', after2['M-20261120-9983'].status === 'expired', String(after2['M-20261120-9983'].status))
+  }
 }
 
 console.log(lines.join('\n'))
