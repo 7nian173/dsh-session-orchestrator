@@ -1536,6 +1536,36 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
     JSON.stringify(dupLetter.evidence),
   )
 
+  // ③d 去重必须在归一化**之后**：混合 undefined / null / 0 时顺序会改变结果
+  //
+  // 这条来自使用方 lead 的判据：
+  //   「如果一段代码『顺序对了但说不出为什么』，那它需要一个能证明顺序的测试，
+  //    不是一个注释。注释会腐坏，测试不会。」
+  //
+  // 我上封信说「顺序对了」，但没验过。实测发现：
+  //   两条都 undefined       → 先去重/后去重都是 1 条（无差异）
+  //   一条 undefined 一条 null → 先去重 2 条，后去重 1 条  ← 顺序有影响
+  //   一条 0 一条 null        → 先去重 2 条，后去重 1 条  ← 顺序有影响
+  //
+  // 因为 undefined !== null，但归一化会把两者都变成 null → 合并。
+  await evBox.send({
+    owner: 'EV8', peer: 'EV2', type: 'R-ALERT', body: '归一化后去重',
+    senderSessionId: 'SEV8', peerSessionId: 'SEV2', mailId: 'M-20261120-9907',
+    evidence: [
+      { path: 'mix.js' },                    // -> line: null
+      { path: 'mix.js', line: null },        // -> line: null（应与上一条合并）
+      { path: 'mix.js', line: 0 },           // -> line: null（也应合并）
+      { path: 'mix.js', line: '' },          // -> line: null（也应合并）
+    ],
+  })
+  const mixRaw = await readJson(join(evWs, '.dsh-mail', '_letters.json'))
+  const mixLetter = (mixRaw.letters || []).find((e) => e.id === 'M-20261120-9907')
+  check(
+    '去重在归一化之后：undefined/null/0/空串 混合 → 合并成 1 条',
+    (mixLetter && mixLetter.evidence && mixLetter.evidence.length) === 1,
+    JSON.stringify(mixLetter && mixLetter.evidence),
+  )
+
   // ④ 非 R-* 类型无证据时不写 none（避免噪音）
   await evBox.send({
     owner: 'EV5', peer: 'EV2', type: 'S-PROGRESS', body: '进度通知',
