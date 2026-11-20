@@ -353,6 +353,26 @@ Or hand it the link:
 Those are the plugin's full manuals (install, parameters, state flow, rejection codes, every config key).
 The skill is a condensed operating version for repeated use; the manual suits one-off work where details matter.
 
+#### ⚠️ Skipping these two sections will cost you a failure
+
+Two tables in the manual are **not background reading — they are "skip them and you will fail" information**:
+
+| Section | What is in it | Cost of skipping |
+|---|---|---|
+| §14 Error codes | Cause and recovery for every rejection code | You hit a code and do not know what to do, then thrash |
+| §15 All settings | Default and effect of every switch | A feature is silently off; it looks like it works |
+
+**Measured** (2026-11-20, another team): the assistant was blocked by `AGENT_CREATE_DISABLED`,
+asked the human "authorise me", the human said "authorised", and **the retry was still rejected** —
+it is a settings-level switch and verbal authorisation cannot change it. It took three attempts
+before checking the settings table.
+
+**So the better instruction is**:
+
+> Before using the session orchestrator plugin, read **§14 Error codes** and **§15 All settings** in `docs/AGENT-GUIDE.en.md`
+
+Just those two sections — no need to read the whole thing.
+
 ### How the three fit together
 
 | Thing | Audience | Contents |

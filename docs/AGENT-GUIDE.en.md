@@ -4,6 +4,20 @@ You are reading the **guide for agents**. The human-facing documentation is [REA
 
 After this you should know: how to install, what the tools are, how to call them, what fails, and how to recover.
 
+> ## ⚠️ After installing, and before your first tool call, read these two sections
+>
+> - **[§14 Error codes](#14-error-codes)** — every code there corresponds to a call that **will fail**
+> - **[§15 All settings](#15-all-settings)** — every switch there corresponds to a **silent downgrade** (it looks like it works; the feature is off)
+>
+> **This is not "read the whole document". It is "these two tables will bite you if you skip them".**
+>
+> Measured lesson (consumer, 2026-11-20): the intel agent was blocked by `AGENT_CREATE_DISABLED`,
+> asked the human "authorise me to create it", the human said "authorised", and **the retry was
+> still rejected** — because it is a settings-level switch and verbal authorisation cannot change it.
+> It only looked at the settings table after its third failure.
+>
+> **These two tables would have saved those two failures.**
+
 ---
 
 ## 1. Install and reload
@@ -422,7 +436,41 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 | `NO_MAILBOX` | Nobody registered in the target workspace | Have the peer `session_register_name` |
 | `PRESET_NOT_FOUND` | Preset id does not exist | Use a real preset id |
 | `CONFIRM_REQUIRED` | Confirmation token invalid or expired | Send the first request again for a new token |
-| `AGENT_CREATE_DISABLED` | Settings forbid **self-initiated** session creation | If the human explicitly asked this turn, the permit was not recognised: restate their request for confirmation, or ask them to enable it. **Do not work around it** (no hand-made directories, no scripts) |
+| `AGENT_CREATE_DISABLED` | Settings forbid **self-initiated** session creation | **Read the box below first.** Two causes: ① the human never asked → ask them; ② the human did ask but you are still rejected → **a settings switch is off; stop asking the human and ask them to change the setting** |
+
+> ### "Authorisation" and "setting" are two different things
+>
+> `AGENT_CREATE_DISABLED` has two causes, and the correct action is **opposite**:
+>
+> | Cause | Symptom | Correct action |
+> |---|---|---|
+> | The human genuinely did not ask this turn | Rejected on the first call | Ask whether they want one |
+> | The human did ask, but the switch is off | **Rejected again and again no matter how many times you ask** | **Stop retrying; ask the human to change the setting** |
+>
+> **An explicit human request solves "willingness"; `allowAgentCreateSession` solves "capability".**
+> **Willingness does not change capability.** The human can say "authorised" a hundred times —
+> if the switch is off, you will be rejected a hundred times.
+>
+> Measured (consumer, 2026-11-20): rejected → asked the human "authorise me" → human said "authorised"
+> → retry rejected → assumed "the authorisation was not clear enough" → asked again → rejected again
+> → only on the third failure thought to check the settings.
+>
+> **Rule of thumb**: if the human has clearly said it and you are sure they understood, and the call
+> still returns this code — **stop asking the human. Say: "you need to enable allowAgentCreateSession
+> under Settings → Session Orchestration → Security".** Repeatedly asking just makes them think you
+> did not understand.
+>
+> ### Why you must not work around it
+>
+> Hand-making directories, scripts, or a bare `mkdir` can bypass the gate, and the resulting workspace
+> **looks usable** — but it:
+>
+> - has no `.dsh-mail/` (no mailbox)
+> - is not registered in DSH's workspace list (`workspaceRegistry.list()` will not see it)
+> - makes `mail_send` / `mail_inbox` / `createTaskChannel` — anything that **needs a mailbox** — return `NO_MAILBOX`
+>
+> **It is not "a usable workspace", it is an island.** "Do not work around it" is discipline;
+> knowing **what breaks when you do** is the actual criterion.
 | `PRESET_REQUIRED` | "Ask for preset" is on but none was given | List presets for the human to choose, then retry |
 
 ---
