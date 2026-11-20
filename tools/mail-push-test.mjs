@@ -1,7 +1,6 @@
 import { mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { createMailbox, ensureWorkspaceBox, isSafeMailId, receiptOf } from '../lib/mail.js'
-import { codeFreshness } from '../lib/index.js'
+import { createMailbox, ensureWorkspaceBox, isSafeMailId, receiptOf, codeFreshness } from '../lib/mail.js'
 
 const tmp = join(process.cwd(), '_tmp', 'mail-ws-test')
 
