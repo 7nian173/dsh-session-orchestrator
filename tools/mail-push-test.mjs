@@ -1787,5 +1787,61 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   check('对照组：未读的仍然会超时转 blocked', unRow.status === 'blocked', JSON.stringify({ status: unRow.status, reason: unRow.blockReason }))
 }
 
+// ── PAIR_OUTSTANDING 要给「下一步发什么」，而且给出的建议必须能用 ──
+//
+// 使用方 lead 指出的互锁（2026-11-20）：
+//   「已读不超时」让 delivered 永不转 blocked
+//   「delivered 挡新信且不软释放」让这封永远挡着
+// 两条各自都对，合起来是死锁。
+//
+// 出路存在（S-TODO-NOTICE / S-EXPIRE / S-ACK 都豁免背压），但
+// **「知道有出路」和「知道下一步发什么」之间差一步**。
+//
+// ⚠️ 而且建议必须给全必填字段——我第一版只给 todoOf 和 reason，
+// 照着填会 MAIL_INVALID。**那比不给建议更糟**：它让人以为照做就行了，结果又失败一次。
+{
+  const poWs = join(tmp, 'pair-outstanding')
+  await ensureWorkspaceBox(poWs)
+  const poBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => poWs,
+    cwds: async () => [poWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => ({ state: () => 'idle' }),
+  })
+  await poBox.send({
+    owner: 'PO1', peer: 'PO2', type: 'R-ALERT', body: '第一封',
+    senderSessionId: 'SPO1', peerSessionId: 'SPO2', mailId: 'M-20261120-9951',
+  })
+  // 模拟对方读了（进 he 的一轮）→ delivered
+  await poBox.noteStep({ id: 'SPO2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·M-20261120-9951〕' }] }])
+
+  const blocked = await poBox.send({
+    owner: 'PO1', peer: 'PO2', type: 'R-ALERT', body: '第二封',
+    senderSessionId: 'SPO1', peerSessionId: 'SPO2', mailId: 'M-20261120-9952',
+  })
+  check('delivered 的信会挡住新信', blocked.ok === false && blocked.error.code === 'PAIR_OUTSTANDING', JSON.stringify(blocked.error && blocked.error.code))
+  check(
+    '被挡时给出建议类型',
+    blocked.error && blocked.error.suggestedType === 'S-TODO-NOTICE',
+    JSON.stringify(blocked.error && blocked.error.suggestedType),
+  )
+  const sf = (blocked.error && blocked.error.suggestedFields) || {}
+  check(
+    '建议字段包含 S-TODO-NOTICE 的四个必填（todoOf/stuckSince/elapsedMinutes/reason）',
+    Boolean(sf.todoOf) && Boolean(sf.stuckSince) && Number.isFinite(sf.elapsedMinutes) && Boolean(sf.reason),
+    JSON.stringify(sf),
+  )
+
+  // 关键：照建议填必须真的能发出去（否则建议是假的）
+  const followed = await poBox.send({
+    owner: 'PO1', peer: 'PO2', type: 'S-TODO-NOTICE', body: '按建议催收',
+    senderSessionId: 'SPO1', peerSessionId: 'SPO2', mailId: 'M-20261120-9953',
+    ...sf,
+  })
+  check('照 suggestedFields 填能真的发出去（S-TODO-NOTICE 豁免背压）', followed.ok === true, JSON.stringify(followed.error && (followed.error.issues || followed.error.code)))
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
