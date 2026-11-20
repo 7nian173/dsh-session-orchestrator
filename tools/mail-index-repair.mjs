@@ -9,7 +9,7 @@
  *   - <cwd>/.dsh-mail/envelope/<mail_id>.<side>.md 的 `path:` 行
  * 只会追加/补齐，不删除任何信件或文件。
  */
-import { readFile, readdir, writeFile } from 'node:fs/promises'
+import { appendFile, readFile, readdir, writeFile } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 
 const CODES = { pending: 'P', awaiting_ack: 'A', pushed: 'A', delivered: 'R', running: 'R', acked: 'R', blocked: 'B', done: 'D' }
@@ -27,6 +27,15 @@ const dryRun = flags.includes('--dry-run')
 // 需要人确认；而补 status 是纯补字段，副作用可忽略。
 // 两件事混在一个命令里，会让人为了补字段而顺手改掉路径。
 const statusOnly = flags.includes('--status-only')
+// --log-to <path>：跑完把「时刻 | 命令 | 目录 | 改动数」追加一行到指定文件。
+//
+// 使用方 lead 的诉求：「任何写运行态数据的命令，跑完立刻把时刻/命令/改动数
+// 写进施工记录。」他本来打算靠自己记，但**让工具自己记比让人记得更可靠**。
+//
+// 格式（他定，可 grep，管道分隔）：
+//   2026-11-20T11:31:02Z | mail-index-repair --status-only | Super-agent | 补 96 条
+const logToIndex = flags.indexOf('--log-to')
+const logTo = logToIndex >= 0 ? flags[logToIndex + 1] : null
 const cwd = resolve(cwdArg)
 const box = join(cwd, '.dsh-mail')
 
@@ -78,7 +87,20 @@ const nextIndex = JSON.parse(JSON.stringify(index || {}))
 //
 // **那个 0 是我注释和实现相反造成的**：注释写「只统计 status===undefined
 // 的条目，不是全部孤儿」，实现却是「只统计本体存在的」，两回事。
-const REPAIR_CODE_TO_STATUS = { A: 'pushed', P: 'pending', R: 'delivered', B: 'blocked', D: 'done', E: 'expired' }
+// ⚠️ `R` 对应三个状态（delivered / running / acked），反推成一个值是猜测。
+//
+// 选 `acked` 而不是 `delivered` 或 `unknown`，依据是**真实数据**，不是保守：
+// 使用方 lead 那 105 条孤儿里，sides 全为 R 的 83 条中，
+// **81 条实际是 acked、只有 2 条是 delivered**。
+//
+// 而且这些条目的 updatedAt 都是 11-17（同一天），说明 status 是当年插件自己写的、
+// 是真实历史值，不是推断值——所以「R 在本项目的真实分布里压倒性对应 acked」这条
+// 有实证支撑。
+//
+// 我原来倾向改 `unknown`（更保守），使用方反驳得对：
+// **保守不是正确，只是不犯错。** unknown 会让 83 条全部变成不可知，
+// 而 acked 与事实一致 81/83。
+const REPAIR_CODE_TO_STATUS = { A: 'pushed', P: 'pending', R: 'acked', B: 'blocked', D: 'done', E: 'expired' }
 const REPAIR_CODE_RANK = { P: 0, A: 1, R: 2, B: 3, D: 4, E: 5 }
 const statusFromSides = (entry) => {
   const codes = ['from', 'to']
@@ -230,4 +252,18 @@ if (!dryRun && (changes.length > 0 || statusFilled.length > 0)) {
   console.log('信封 path 行已同步:', patched)
 } else if (dryRun) {
   console.log('（--dry-run，未写盘）')
+}
+
+// 施工记录：只在真跑（非 dry-run）且确实有改动时写，避免刷屏。
+if (logTo && !dryRun && (changes.length > 0 || statusFilled.length > 0)) {
+  const parts = []
+  if (statusFilled.length > 0) parts.push('补 ' + statusFilled.length + ' 条 status')
+  if (changes.length > 0) parts.push('修 ' + changes.length + ' 处 path')
+  const line = [new Date().toISOString(), 'mail-index-repair' + (statusOnly ? ' --status-only' : ''), basename(cwd), parts.join(' + ')].join(' | ')
+  try {
+    await appendFile(resolve(logTo), line + '\n', 'utf8')
+    console.log('施工记录已追加:', logTo)
+  } catch (error) {
+    console.error('写施工记录失败:', (error && error.message) || String(error))
+  }
 }
