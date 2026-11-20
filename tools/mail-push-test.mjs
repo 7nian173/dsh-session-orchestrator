@@ -1,6 +1,7 @@
 import { mkdir, rm, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createMailbox, ensureWorkspaceBox, isSafeMailId, receiptOf } from '../lib/mail.js'
+import { codeFreshness } from '../lib/index.js'
 
 const tmp = join(process.cwd(), '_tmp', 'mail-ws-test')
 
@@ -1556,6 +1557,26 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   const all = Object.values(ixRaw)
   const byExact = all.filter((e) => e.status === 'pending').length + all.filter((e) => e.status === 'pushed').length
   check('按 status 精确筛能得到结果（不是永远 0）', byExact > 0, String(byExact))
+}
+
+// ── 「改了 ≠ 生效」的机检 ──
+// 使用方 lead 指出：我的断言全绿，但他的运行实例还是旧代码。
+// 因为断言直接调函数、不经过运行实例 —— 两边都对，中间差一次重载。
+// 今天这个形状咬了三次（evidence 后端/schema/索引 status）。
+//
+// 判据：加载时刻早于代码 mtime = 未重载。
+{
+  const fresh = codeFreshness()
+  check('codeFreshness 返回完整结构', fresh && typeof fresh.loadedAt === 'string' && typeof fresh.stale === 'boolean', JSON.stringify(fresh))
+  check('刚加载时应判定为「不落后」', fresh.stale === false, JSON.stringify({ stale: fresh.stale, mtime: fresh.codeMtime, loaded: fresh.loadedAt }))
+  // 关键：判据必须是「代码 mtime > 加载时刻」，不是别的
+  const loadedMs = Date.parse(fresh.loadedAt)
+  const mtimeMs = Date.parse(fresh.codeMtime)
+  check(
+    '判据是「代码 mtime 晚于加载时刻」（允许 2 秒误差）',
+    fresh.stale === (mtimeMs > loadedMs + 2000),
+    JSON.stringify({ loadedMs, mtimeMs, stale: fresh.stale }),
+  )
 }
 
 console.log(lines.join('\n'))
