@@ -33,6 +33,10 @@ if (!hasSchema) {
     '  ⚠️ SKIP ≠ 通过：工具层 schema 本次**没有被验过**。' +
       '本测试专门拦「后端有字段、工具 schema 没放行」这类 bug（2026-11-20 撞过两次）。',
   )
+  // 光说「没验」不够——要说「去哪儿验」，否则读的人知道有缺口却无处补。
+  // （使用方 lead 的建议）
+  console.log('  若要验，请在开发端跑（仓库根目录有 node_modules 的那一侧）：')
+  console.log('    cd <开发端> && node tools/tool-schema-test.mjs')
   process.exit(0)
 }
 

@@ -1629,6 +1629,49 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
     fresh.stale === (mtimeMs > loadedMs + 2000),
     JSON.stringify({ loadedMs, mtimeMs, stale: fresh.stale }),
   )
+
+  // ⚠️ 不能缓存结果。
+  //
+  // 原实现有 `if (mailCodeState) return mailCodeState`——第一次调用把结果缓存住，
+  // 之后代码再改也不会重新读 mtime。
+  //
+  // 后果（2026-11-20 使用方 lead 实测踩到）：他重载前查一次，之后我推了新代码，
+  // 他再查仍然得到 `stale: false`。**这个字段本来就是为了回答「现在是不是旧的」，
+  // 缓存之后它只能回答「第一次问的时候是不是旧的」——比没有更糟。**
+  {
+    // ⚠️ 光「两次调用结果一致」验不出缓存——缓存和重新读在没变化时结果相同。
+    // 必须**主动制造变化**：改一个文件的 mtime，再看 codeFreshness 有没有跟着变。
+    //
+    // 这也正是使用方 lead 说的「造能触发新代码路径的输入」。
+    const { statSync, utimesSync } = await import('node:fs')
+    const { fileURLToPath } = await import('node:url')
+    const { dirname: dirOf } = await import('node:path')
+    const libDir = dirOf(fileURLToPath(import.meta.url)) + '/../lib'
+    const probe = join(libDir, 'client.js')
+
+    const firstCall = codeFreshness()
+    const originalStat = statSync(probe)
+    // 往后拨 60 秒（远超 2 秒容差），制造「代码比加载时刻新」
+    const future = new Date(Date.now() + 60000)
+    let restored = false
+    try {
+      utimesSync(probe, future, future)
+      const afterTouch = codeFreshness()
+      check(
+        'codeFreshness 每次重新读 mtime（不缓存）',
+        Date.parse(afterTouch.codeMtime) !== Date.parse(firstCall.codeMtime),
+        JSON.stringify({ before: firstCall.codeMtime, after: afterTouch.codeMtime, file: afterTouch.newestFile }),
+      )
+      utimesSync(probe, originalStat.atime, originalStat.mtime)
+      restored = true
+    } finally {
+      if (!restored) {
+        try {
+          utimesSync(probe, originalStat.atime, originalStat.mtime)
+        } catch {}
+      }
+    }
+  }
 }
 
 // ── 冷启动补齐索引 status：包括「孤儿索引」 ──
