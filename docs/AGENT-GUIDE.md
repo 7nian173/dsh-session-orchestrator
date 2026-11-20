@@ -476,9 +476,18 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 >
 > - 没有 `.dsh-mail/`（没有信箱）
 > - 没有登记进 DSH 的工作区列表（`workspaceRegistry.list()` 看不到它）
-> - 后续 `mail_send` / `mail_inbox` / `createTaskChannel` 这类**需要信箱的工具**全部报 `NO_MAILBOX`
+> - **`createTaskChannel` 会报 `NO_MAILBOX`**（它要求该工作区已有 `_ledger.json`）
+> - 但注意：`mail_send` / `mail_inbox` / `mail_list` **不会因此报错**——它们在空目录上
+>   照样返回 `ok:true`（实测如此），这反而更坑：**你以为信箱在工作，其实那封信
+>   落在了一个没有被任何会话认领的地方。**
 >
 > **它不是「能用的工作区」，是个孤岛。** 光说「不要绕路」是纪律；知道「绕了会坏在哪」才是判据。
+>
+> 而且**孤岛的失败是静默的**：只有 `createTaskChannel` 会明确拒绝，
+> 其余写信/读信接口都「成功」——所以你不能靠报错发现它。
+> 判据是：**这个工作区里有没有已注册的会话**。查法：`mail_list(owner=<该工作区里的角色名>)`
+> 返回 `count: 0` 且你确认从没注册过 → 那是孤岛。
+> （`mail_friends` 是跨工作区的全局好友表，它看得到不代表这个工作区信件能落地。）
 
 ---
 

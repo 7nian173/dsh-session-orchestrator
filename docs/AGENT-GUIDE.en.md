@@ -467,10 +467,20 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 >
 > - has no `.dsh-mail/` (no mailbox)
 > - is not registered in DSH's workspace list (`workspaceRegistry.list()` will not see it)
-> - makes `mail_send` / `mail_inbox` / `createTaskChannel` — anything that **needs a mailbox** — return `NO_MAILBOX`
+> - **`createTaskChannel` returns `NO_MAILBOX`** (it requires that workspace to already have a `_ledger.json`)
+> - but note: `mail_send` / `mail_inbox` / `mail_list` **do NOT fail there** — measured, they return
+>   `ok:true` on an empty directory. That is *worse*: **you think the mailbox works, while the letter
+>   landed somewhere no session ever claimed.**
 >
 > **It is not "a usable workspace", it is an island.** "Do not work around it" is discipline;
 > knowing **what breaks when you do** is the actual criterion.
+>
+> And **the island fails silently**: only `createTaskChannel` refuses outright; every other
+> send/read call "succeeds" — so you cannot discover it from an error.
+> The test is: **is any session registered in that workspace?** Check with
+> `mail_list(owner=<a role name from that workspace>)` — `count: 0` plus "never registered"
+> means it is an island. (`mail_friends` is the global friend table across workspaces;
+> being visible there does not mean mail can land in that workspace.)
 | `PRESET_REQUIRED` | "Ask for preset" is on but none was given | List presets for the human to choose, then retry |
 
 ---
