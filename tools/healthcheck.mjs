@@ -33,6 +33,12 @@ run('断言 mail-push-test', [join(root, 'tools/mail-push-test.mjs')])
 // 授权窗口翻页：这段逻辑失效是静默的（长会话里人类自己的请求被门控拦掉），
 // 必须进自检，否则单靠 mail-push-test 全绿也发现不了。
 run('断言 permit-window-test', [join(root, 'tools/permit-window-test.mjs')])
+// 工具层 schema 测试：验证「模型能传进来的参数」覆盖后端实际需要的字段。
+//
+// 为什么单列一个文件：断言跑在后端（直接调 submitLocal），而 bug 在工具层。
+// 2026-11-20 两次同一形状 —— evidence 与 S-TODO-NOTICE 三字段，
+// 都是「后端写了、工具 schema 没放行」，模型传不进去，后端逻辑是死代码。
+run('断言 tool-schema-test', [join(root, 'tools/tool-schema-test.mjs')])
 // 隐私与可移植性：扫本机绝对路径、真实会话/信件 id、主机名。
 // 为什么进自检：这类东西一旦进了文档就跟着发布出去，而且没人会回头再看。
 // 实测（2026-11-20）：一处本机路径跟着 Release 正文和 tag message 一起上了 GitHub。

@@ -22,6 +22,7 @@
     "tools/permit-window-test.mjs",
     "tools/_permit-window-test-body.mjs",
     "tools/privacy-check.mjs",
+    "tools/tool-schema-test.mjs",
     "tools/mail-index-repair.mjs"
   ],
   "keywords": [
