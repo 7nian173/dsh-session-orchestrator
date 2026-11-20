@@ -53,36 +53,60 @@ const root = resolveRoot()
 //
 // 判据不是「文件里有没有本机路径」，是「这个目录会不会被发布」。
 // 这和 docsOnly 是同一个道理：不看它长什么样，看它为什么在这。
-const loadScope = () => {
-  const argv = process.argv.slice(2)
-  const patterns = []
+// ⚠️ allow 与 ignore 是**两个方向**，不能共用一个数组。
+//
+// 使用方 lead 实测踩到：我原来让 `.privacyignore` 和 `--scope` 共用同一个
+// 白名单数组，于是 `.privacyignore` 里写 `_施工记录/` 的实际行为是
+// **「只扫 _施工记录」**，而不是「排除 _施工记录」——
+// 结果是「看起来在扫，实际扫反了」，而且报出一堆红字让人以为检查有效。
+//
+// 这个形状正是我们反复撞的那个：功能叫 A、行为是 B、用时看着像 C。
+//
+// 现在分开：
+//   --only / --scope     白名单（只扫这些）
+//   --skip / .privacyignore  黑名单（排除这些）
+// 两者的优先级：先按 only 收窄，再按 skip 排除。
+const normalizeEntry = (value) => String(value).replace(/\\/g, '/').replace(/\/+$/, '')
 
-  // 命令行：--scope a/b --scope c/
+const loadFilters = () => {
+  const argv = process.argv.slice(2)
+  const only = []
+  const skip = []
+
   for (let i = 0; i < argv.length; i += 1) {
-    if (argv[i] === '--scope' && argv[i + 1]) patterns.push(argv[i + 1])
+    // --scope 保留为 --only 的别名（已有人这么用），但语义明确写进帮助与启动行
+    if ((argv[i] === '--only' || argv[i] === '--scope') && argv[i + 1]) only.push(argv[i + 1])
+    if (argv[i] === '--skip' && argv[i + 1]) skip.push(argv[i + 1])
   }
 
-  // 文件：.privacyignore（每行一条，支持 # 注释与结尾 /）
+  // .privacyignore 是**排除**列表（名字与行为一致）
   try {
     const text = readFileSyncSync(join(root, '.privacyignore'), 'utf8')
     for (const raw of text.split('\n')) {
       const line = raw.trim()
       if (!line || line.startsWith('#')) continue
-      patterns.push(line)
+      skip.push(line)
     }
   } catch {
-    // 没有这个文件就是没配 scope
+    // 没有这个文件就不过滤
   }
 
-  return patterns.map((p2) => p2.replace(/\\/g, '/').replace(/\/+$/, ''))
+  return { only: only.map(normalizeEntry), skip: skip.map(normalizeEntry) }
 }
-const scopePatterns = loadScope()
+const filters = loadFilters()
+const scopePatterns = filters.only
 
-/** 路径是否落在 scope 之外（scope 里写的是「要扫的」，没写就是全扫）。 */
+/**
+ * 路径是否要扫。两个方向依次判：
+ *   1. only（白名单）非空时，必须在其中
+ *   2. skip（黑名单）命中就排除
+ */
+const matches = (normalized, list) => list.some((entry) => normalized === entry || normalized.startsWith(entry + '/'))
 const inScope = (relPath) => {
-  if (scopePatterns.length === 0) return true
   const normalized = relPath.replace(/\\/g, '/')
-  return scopePatterns.some((entry) => normalized === entry || normalized.startsWith(entry + '/'))
+  if (filters.only.length > 0 && !matches(normalized, filters.only)) return false
+  if (filters.skip.length > 0 && matches(normalized, filters.skip)) return false
+  return true
 }
 
 /** 只扫会被发布/公开的东西 */
@@ -293,13 +317,14 @@ const main = async () => {
     }
   }
 
-  // files.length 是「找到的候选文件数」，scope 里实际扫的更少。
-  // 只报前者会让人以为 scope 没生效（使用方实测就这么误判过），所以两个都给。
+  // 报告里必须写清**方向**：白名单还是黑名单。
+  // 使用方实测踩过——原来只写「scope 限定 X」，「scope」这个词不表明方向，
+  // 他用 .privacyignore 想排除，实际是「只扫这些」，扫反了却没看出来。
   const scannedCount = files.filter((f) => inScope(relative(root, f).replace(/\\/g, '/'))).length
-  const scopeNote =
-    scopePatterns.length > 0
-      ? '，scope 限定 ' + scopePatterns.join(' / ') + '（实际扫 ' + scannedCount + '）'
-      : ''
+  const parts = []
+  if (filters.only.length > 0) parts.push('只扫 ' + filters.only.join(' / '))
+  if (filters.skip.length > 0) parts.push('排除 ' + filters.skip.join(' / '))
+  const scopeNote = parts.length > 0 ? '，' + parts.join('；') + '（实际扫 ' + scannedCount + '）' : ''
   console.log('隐私与可移植性检查（候选 ' + files.length + ' 个文件' + scopeNote + '）')
 
   // git 载体（commit / tag）——工作树干净也查不到这些东西
