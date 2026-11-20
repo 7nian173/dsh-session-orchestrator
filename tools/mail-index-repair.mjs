@@ -275,7 +275,10 @@ if (logTo && !dryRun && (changes.length > 0 || statusFilled.length > 0)) {
   // 退出码 4 与口径自检的 3 区分开。
   try {
     await appendFile(resolve(logTo), line + '\n', 'utf8')
-    console.log('施工记录已追加:', logTo)
+    // 成功也要说话。使用方 lead 指出：现在只有失败才输出，成功是静默的——
+    // **这又是「静默成功」，和「静默失败」形似而义反。**
+    // 「我不该靠『没有报错』来推断『记上了』。」
+    console.log('✓ 已记入', logTo)
   } catch (error) {
     console.error('✗ --log-to 写入失败:', logTo, '(' + ((error && error.code) || (error && error.message) || String(error)) + ')')
     console.error('  这次改动已经写盘，但**没有留下施工记录**。修好路径后请手工补记这一行：')
