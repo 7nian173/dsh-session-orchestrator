@@ -10,7 +10,7 @@
  * 只会追加/补齐，不删除任何信件或文件。
  */
 import { readFile, readdir, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 
 const CODES = { pending: 'P', awaiting_ack: 'A', pushed: 'A', delivered: 'R', running: 'R', acked: 'R', blocked: 'B', done: 'D' }
 
@@ -93,6 +93,24 @@ for (const letter of letters.letters || []) {
   }
 }
 
+// ⚠️ 报数必须带三样：口径 / 时刻 / 命令。
+//
+// 少了「时刻」的后果（使用方 lead 实测）：同一个口径下，他自己两次跑得出
+// 「done 16」和「done 17」——差异是那几分钟里他发了一封信，进了索引。
+// 也就是说：**口径写清只能保证不同人得出同一个数，
+// 不能保证同一个人在不同时刻得出同一个数。**
+//
+// 少了「口径」的后果：我和他算同一份数据得出 96 vs 101，
+// 因为他算「全部孤儿」、我算「缺 status 的孤儿」。两人都以为自己对。
+console.log('=== 统计（这三个数必须一起看）===')
+console.log('时刻:', new Date().toISOString(), '（本机', new Date().toLocaleString('zh-CN', { hour12: false }), '）')
+// 只打目录名不打绝对路径：这个输出会被贴进信里/文档里，
+// 而绝对路径是隐私扫描要拦的东西（今天刚因此返工过一次 Release）。
+console.log('命令: node tools/mail-index-repair.mjs <workspace>', statusOnly ? '--status-only' : '', dryRun ? '--dry-run' : '')
+console.log('目标目录:', basename(cwd))
+console.log('口径: 扫 _letters.json 全部信件 + _index.json 现有条目；')
+console.log('      「需要补齐 status」只统计 status===undefined 的条目，不是全部孤儿')
+console.log()
 console.log('信件数:', (letters.letters || []).length, ' · 留痕事件:', (ledger.events || []).length)
 console.log('需要修正 path:', changes.length)
 console.log('需要补齐 status:', statusFilled.length)
