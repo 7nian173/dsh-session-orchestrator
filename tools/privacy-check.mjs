@@ -118,6 +118,84 @@ const collect = async (dir, out = []) => {
   return out
 }
 
+/**
+ * 扫 git 载体：commit message 与 tag annotated message。
+ *
+ * 为什么要单独扫（使用方 lead 指出的，我原来的说法不够准）：
+ *   - tag 的 annotated message 在 `.git` 对象库里，`git status` 看不见
+ *   - commit message 同样在对象库里，`git status` 也看不见
+ *   - GitHub Release 正文根本不在本机，要 `gh release view`
+ *
+ * 所以「发布前自检」不是一个动作，是四个不同的检查：
+ *   工作树 git status / commit git log / tag git tag -n99 / Release gh release view
+ * 2026-11-20 实测：一处本机路径同时进了 tag message 和 Release 正文，
+ * 而工作树当时是干净的。
+ *
+ * ⚠️ 只查「将要推送但还没推送的」，不查历史。
+ * 扫描的目的是**阻止新泄露进入**，不是清算历史。历史改不了，
+ * 让它永远红会让人习惯性忽略红灯。
+ */
+const scanGitCarriers = async () => {
+  const { execFileSync } = await import('node:child_process')
+  const hits = []
+  const run = (args) => {
+    try {
+      return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    } catch {
+      return ''
+    }
+  }
+
+  const checkText = (label, text) => {
+    const lines = String(text).split('\n')
+    for (let i = 0; i < lines.length; i += 1) {
+      for (const rule of HARD_RULES) {
+        if (rule.docsOnly) continue // git message 里的 id 一律按潜在真实数据处理
+        if (rule.test.test(lines[i])) {
+          hits.push({ carrier: label, line: i + 1, rule: rule.id, why: rule.why, text: lines[i].trim().slice(0, 120) })
+        }
+      }
+    }
+  }
+
+  // 基准点：依次尝试 origin/master、origin/HEAD、本地 master。
+  // 全都没有就跳过——CI 浅克隆里可能拿不到，拿不到不等于有问题。
+  const base = (() => {
+    for (const candidate of ['origin/master', 'origin/HEAD', 'master']) {
+      const sha = run(['rev-parse', '--verify', '--quiet', candidate]).trim()
+      if (sha) return candidate
+    }
+    return ''
+  })()
+
+  if (base) {
+    const range = base + '..HEAD'
+    const log = run(['log', range, '--format=%B%n---COMMIT---'])
+    if (log.trim()) checkText('待推送 commit(' + range + ')', log)
+  } else {
+    console.log('  （跳过 commit 扫描：找不到基准分支）')
+  }
+
+  // tag 只查「本地有、远端没有」的——已推送的 tag 同样改不了历史
+  const localTags = run(['tag', '-l']).split('\n').filter(Boolean)
+  const remoteTags = new Set(
+    run(['ls-remote', '--tags', 'origin'])
+      .split('\n')
+      .map((line) => {
+        const m = line.match(/refs\/tags\/(.+?)(?:\^\{\})?$/)
+        return m ? m[1] : ''
+      })
+      .filter(Boolean),
+  )
+  for (const tag of localTags) {
+    if (remoteTags.has(tag)) continue
+    const body = run(['tag', '-n99', '-l', tag])
+    if (body) checkText('未推送 tag:' + tag, body)
+  }
+
+  return hits
+}
+
 const main = async () => {
   const files = await collect(root)
   const hard = []
@@ -152,6 +230,10 @@ const main = async () => {
   }
 
   console.log('隐私与可移植性检查（扫描 ' + files.length + ' 个文件）')
+
+  // git 载体（commit / tag）——工作树干净也查不到这些东西
+  const carrierHits = await scanGitCarriers()
+  for (const hit of carrierHits) hard.push({ file: hit.carrier, line: hit.line, rule: hit.rule, why: hit.why, text: hit.text })
 
   if (soft.length > 0) {
     console.log('\n提示（请自行确认是编的例子，不是真目录）：')
