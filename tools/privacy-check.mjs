@@ -293,8 +293,14 @@ const main = async () => {
     }
   }
 
-  const scopeNote = scopePatterns.length > 0 ? '，scope 限定 ' + scopePatterns.join(' / ') : ''
-  console.log('隐私与可移植性检查（扫描 ' + files.length + ' 个文件' + scopeNote + '）')
+  // files.length 是「找到的候选文件数」，scope 里实际扫的更少。
+  // 只报前者会让人以为 scope 没生效（使用方实测就这么误判过），所以两个都给。
+  const scannedCount = files.filter((f) => inScope(relative(root, f).replace(/\\/g, '/'))).length
+  const scopeNote =
+    scopePatterns.length > 0
+      ? '，scope 限定 ' + scopePatterns.join(' / ') + '（实际扫 ' + scannedCount + '）'
+      : ''
+  console.log('隐私与可移植性检查（候选 ' + files.length + ' 个文件' + scopeNote + '）')
 
   // git 载体（commit / tag）——工作树干净也查不到这些东西
   const carrierHits = await scanGitCarriers()
