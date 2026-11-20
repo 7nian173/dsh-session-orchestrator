@@ -16,10 +16,17 @@ const CODES = { pending: 'P', awaiting_ack: 'A', pushed: 'A', delivered: 'R', ru
 
 const [cwdArg, ...flags] = process.argv.slice(2)
 if (!cwdArg) {
-  console.error('usage: node tools/mail-index-repair.mjs <workspace dir> [--dry-run]')
+  console.error('usage: node tools/mail-index-repair.mjs <workspace dir> [--dry-run] [--status-only]')
   process.exit(2)
 }
 const dryRun = flags.includes('--dry-run')
+// --status-only：只补 status 字段，不动 path。
+//
+// 为什么需要这个开关：2026-11-20 实测，对「本地」工作区跑全量修复时
+// 会同时改 21 处 path 和 63 处 status。**改 path 是修改历史数据的显示路径**，
+// 需要人确认；而补 status 是纯补字段，副作用可忽略。
+// 两件事混在一个命令里，会让人为了补字段而顺手改掉路径。
+const statusOnly = flags.includes('--status-only')
 const cwd = resolve(cwdArg)
 const box = join(cwd, '.dsh-mail')
 
@@ -55,18 +62,29 @@ const buildPath = (mailId, side, currentCode) => {
 }
 
 const changes = []
+const statusFilled = []
 const nextIndex = JSON.parse(JSON.stringify(index || {}))
 
 for (const letter of letters.letters || []) {
   if (!letter || !letter.id) continue
-  const sides = (letter.fromSession || letter.fromCwd ? ['from'] : []).concat(letter.toSession || letter.toCwd ? ['to'] : [])
+  // 补齐 status 字段。
+  //
+  // 为什么需要：2026-11-20 之前写出的索引条目只有 type/from/to/sides，
+  // 外面按 `e.status !== 'done'` 筛未结案会得到全集（undefined !== 'done' 为真），
+  // 按 `e.status === 'x'` 则永远 0 条。两个方向都错且都返回结果。
+  // 新代码会写这个字段，但旧条目要等各自下次归档才补——所以这里一次性补齐。
+  const entryForStatus = nextIndex[letter.id]
+  if (entryForStatus && entryForStatus.status === undefined && typeof letter.status === 'string') {
+    entryForStatus.status = letter.status
+    statusFilled.push({ mailId: letter.id, status: letter.status })
+  }
   for (const side of ['from', 'to']) {
     const current = letter.status === 'blocked' ? 'B' : letter.status === 'done' ? 'D' : letter.status === 'acked' || letter.status === 'delivered' ? 'R' : side === 'from' ? 'A' : 'P'
     const entry = nextIndex[letter.id] || { type: letter.type, from: letter.from, to: letter.to, sides: {} }
     const prev = entry.sides && entry.sides[side] ? entry.sides[side] : undefined
     const rebuilt = buildPath(letter.id, side, current)
     if (!prev) continue
-    if (prev.path !== rebuilt) {
+    if (!statusOnly && prev.path !== rebuilt) {
       changes.push({ mailId: letter.id, side, from: prev.path, to: rebuilt })
       prev.path = rebuilt
       prev.code = current
@@ -76,10 +94,13 @@ for (const letter of letters.letters || []) {
 }
 
 console.log('信件数:', (letters.letters || []).length, ' · 留痕事件:', (ledger.events || []).length)
-console.log('需要修正:', changes.length)
+console.log('需要修正 path:', changes.length)
+console.log('需要补齐 status:', statusFilled.length)
+for (const f of statusFilled.slice(0, 10)) console.log('  ', f.mailId, '←', f.status)
+if (statusFilled.length > 10) console.log('   … 另有', statusFilled.length - 10, '条')
 for (const c of changes) console.log('  ', c.mailId, c.side, c.from, '→', c.to)
 
-if (!dryRun && changes.length > 0) {
+if (!dryRun && (changes.length > 0 || statusFilled.length > 0)) {
   await writeFile(join(box, '_index.json'), JSON.stringify(nextIndex, null, 2), 'utf8')
   console.log('已写回 _index.json')
 
