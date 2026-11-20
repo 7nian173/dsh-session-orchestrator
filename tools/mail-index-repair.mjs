@@ -65,19 +65,51 @@ const changes = []
 const statusFilled = []
 const nextIndex = JSON.parse(JSON.stringify(index || {}))
 
+// 补齐 status 字段。
+//
+// 为什么需要：2026-11-20 之前写出的索引条目只有 type/from/to/sides。
+// 外面按 `e.status !== 'done'` 筛未结案会得到全集（undefined !== 'done' 为真），
+// 按 `e.status === 'x'` 则永远 0 条。两个方向都错且都返回结果。
+//
+// ⚠️ **必须遍历索引而不是只遍历本体**。使用方 lead 实测报过：
+// 他那边 96 条无 status 的全是「孤儿」（_letters.json 里没有本体）。
+// 早先这里写成 `for (const letter of letters.letters)`，孤儿一条都遍历不到，
+// 于是报「需要补齐 status: 0」——而实际有 96 条要补。
+//
+// **那个 0 是我注释和实现相反造成的**：注释写「只统计 status===undefined
+// 的条目，不是全部孤儿」，实现却是「只统计本体存在的」，两回事。
+const REPAIR_CODE_TO_STATUS = { A: 'pushed', P: 'pending', R: 'delivered', B: 'blocked', D: 'done', E: 'expired' }
+const REPAIR_CODE_RANK = { P: 0, A: 1, R: 2, B: 3, D: 4, E: 5 }
+const statusFromSides = (entry) => {
+  const codes = ['from', 'to']
+    .map((side) => (entry.sides && entry.sides[side] && entry.sides[side].code) || '')
+    .filter(Boolean)
+  if (codes.length === 0) return null
+  if (codes.some((c) => c === 'E')) return 'expired'
+  if (codes.every((c) => c === 'D')) return 'done'
+  const latest = [...codes].sort((a, b) => (REPAIR_CODE_RANK[b] ?? -1) - (REPAIR_CODE_RANK[a] ?? -1))[0]
+  return REPAIR_CODE_TO_STATUS[latest] || 'unknown'
+}
+
+for (const [mailId, entryForStatus] of Object.entries(nextIndex)) {
+  if (!entryForStatus || typeof entryForStatus !== 'object') continue
+  if (entryForStatus.status !== undefined) continue
+  const letter = (letters.letters || []).find((l) => l && l.id === mailId)
+  if (letter && typeof letter.status === 'string') {
+    entryForStatus.status = letter.status
+    statusFilled.push({ mailId, status: letter.status, via: 'body' })
+    continue
+  }
+  const inferred = statusFromSides(entryForStatus)
+  if (!inferred) continue
+  entryForStatus.status = inferred
+  statusFilled.push({ mailId, status: inferred, via: 'sides' })
+}
+
+// path 修正仍然只对本体存在的信件做：path 是显示路径，
+// 孤儿条目没有本体可对照，改它等于编造。
 for (const letter of letters.letters || []) {
   if (!letter || !letter.id) continue
-  // 补齐 status 字段。
-  //
-  // 为什么需要：2026-11-20 之前写出的索引条目只有 type/from/to/sides，
-  // 外面按 `e.status !== 'done'` 筛未结案会得到全集（undefined !== 'done' 为真），
-  // 按 `e.status === 'x'` 则永远 0 条。两个方向都错且都返回结果。
-  // 新代码会写这个字段，但旧条目要等各自下次归档才补——所以这里一次性补齐。
-  const entryForStatus = nextIndex[letter.id]
-  if (entryForStatus && entryForStatus.status === undefined && typeof letter.status === 'string') {
-    entryForStatus.status = letter.status
-    statusFilled.push({ mailId: letter.id, status: letter.status })
-  }
   for (const side of ['from', 'to']) {
     const current = letter.status === 'blocked' ? 'B' : letter.status === 'done' ? 'D' : letter.status === 'acked' || letter.status === 'delivered' ? 'R' : side === 'from' ? 'A' : 'P'
     const entry = nextIndex[letter.id] || { type: letter.type, from: letter.from, to: letter.to, sides: {} }
@@ -108,8 +140,56 @@ console.log('时刻:', new Date().toISOString(), '（本机', new Date().toLocal
 // 而绝对路径是隐私扫描要拦的东西（今天刚因此返工过一次 Release）。
 console.log('命令: node tools/mail-index-repair.mjs <workspace>', statusOnly ? '--status-only' : '', dryRun ? '--dry-run' : '')
 console.log('目标目录:', basename(cwd))
-console.log('口径: 扫 _letters.json 全部信件 + _index.json 现有条目；')
-console.log('      「需要补齐 status」只统计 status===undefined 的条目，不是全部孤儿')
+console.log('口径: 扫 _index.json 全部条目；')
+console.log('      「需要补齐 status」= status===undefined 的条目，含本体存在与孤儿两类')
+
+// 口径自检：打印出来的口径必须和实际行为一致。
+// 这条来自 2026-11-20 使用方 lead 的一次实测——我原来的注释写
+// 「只统计 status===undefined 的条目，不是全部孤儿」，实现却是
+// 「只遍历本体」，两者相反，导致他那边 96 条要补却报 0 条。
+//
+// 判据：把 toFix 按 via 分类，两类都要能被统计到；
+// 若某一类永远是 0，说明那段分支没被走到。
+{
+  const byVia = {}
+  for (const f of statusFilled) byVia[f.via] = (byVia[f.via] || 0) + 1
+  console.log('      实际来源分布:', JSON.stringify(byVia) || '(无)')
+  const entries = Object.values(nextIndex).filter((e) => e && typeof e === 'object')
+  const undefinedCount = entries.filter((e) => e.status === undefined).length
+  const hadStatus = entries.filter((e) => e.status !== undefined).length - statusFilled.length
+  const accountedFor = hadStatus + statusFilled.length + undefinedCount
+  const total = entries.length
+  // ⚠️ 光验「总数守恒」不够。
+  //
+  // 实测：把遍历退回「只遍历本体」后，自检**通过了**——
+  // 因为算式变成「原有 211 + 待补 0 + 仍缺 96 = 307」，算术上守恒，
+  // 但真相是「该补的 96 条一条没补」。
+  //
+  // **守恒式只能证明我数全了，不能证明我补对了。**
+  // 所以要额外验一条：**凡是 status===undefined 且能从数据推出状态的，
+  // 都必须出现在 statusFilled 里**——一个都不能剩。
+  const inferable = entries.filter((e) => e.status === undefined && statusFromSides(e) !== null).length
+  const missed = inferable - statusFilled.filter((f) => f.via === 'sides').length
+  if (accountedFor !== total) {
+    console.log('  ⚠️ 口径自检失败: 原有', hadStatus, '+ 已补', statusFilled.length, '+ 仍缺', undefinedCount, '≠ 总条目', total)
+    process.exitCode = 3
+  } else if (missed > 0) {
+    console.log('  ⚠️ 口径自检失败: 可推断', inferable, '条，实际只补了', statusFilled.filter((f) => f.via === 'sides').length, '条，漏了', missed, '条')
+    process.exitCode = 3
+  } else {
+    console.log(
+      '      ✓ 口径自检通过: 原有',
+      hadStatus,
+      '+ 待补',
+      statusFilled.length,
+      '+ 仍缺',
+      undefinedCount,
+      '=',
+      total,
+      '总条目',
+    )
+  }
+}
 console.log()
 console.log('信件数:', (letters.letters || []).length, ' · 留痕事件:', (ledger.events || []).length)
 console.log('需要修正 path:', changes.length)
