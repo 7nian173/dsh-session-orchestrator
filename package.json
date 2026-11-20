@@ -17,6 +17,7 @@
     "README.en.md",
     "docs/architecture.html",
     "docs/config-chains.md",
+    "docs/WHY-DISK.md",
     "tools/mail-push-test.mjs",
     "tools/permit-window-test.mjs",
     "tools/_permit-window-test-body.mjs",

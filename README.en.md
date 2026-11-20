@@ -214,6 +214,28 @@ When a friend connection is made, when the first letter is sent, or when talking
 
 This is created in the workspace you connect to, not only your own. Back up `.dsh-mail/` before deleting a workspace — it is not tracked by git.
 
+#### This is a deliberate overreach: paying disk for "do not interrupt the peer"
+
+Plainly: **without this directory the plugin would have no reason to exist.**
+
+Because the alternative is to **push the full body straight into the peer's dialogue**. That breaks three things:
+
+| Problem | Consequence |
+|---|---|
+| **Full body lands in context** | One 3000-character letter is roughly 5000 tokens, billed to the receiver |
+| **It interrupts whatever the peer is doing** | The peer may be mid-code, mid-test; a long body derails it |
+| **Nothing to trace once blocked** | No file on disk means finding a blocked letter means scrolling chat history |
+
+So the plugin writes to disk and sends only an index line: **the body stays on disk, the peer decides when to read it.** The cost of that choice is that it must create a directory in the peer's workspace.
+
+The measurements (sample size, token estimates, assumptions) live in a separate file:
+[**Why the disk cost is worth it**](./docs/WHY-DISK.md)
+
+That file covers total body volume, token estimates, the split between carrier overhead and
+body cost, and what "no disk" would cost under the same assumptions.
+**Those numbers describe only the configuration we tested** — a different model, provider or
+task mix will shift them, so measure your own setup.
+
 ### The mailbox is not proof of identity (important)
 
 The mailbox addresses by **name**: the "sender" of a letter is whatever string was written when it was sent. The plugin cannot verify it.
