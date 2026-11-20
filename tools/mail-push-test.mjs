@@ -1256,5 +1256,76 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   check('list 也标出「从未推送过」', lrow.silentlyFiled === true, JSON.stringify({ silentlyFiled: lrow.silentlyFiled }))
 }
 
+// ── 回归：发信方也要能知道「我发出去的信没人读到」──
+// 使用方 lead 提问：`send()` 当场返回 warning，但如果发信方当时没看、
+// 直接过去了，之后有没有地方再提醒他？此前没有 —— stepBanner 只看 toSession，
+// 等于完全不管发信方。结果就是「发了、对方永远收不到、双方都不报错」。
+//
+// 关键的设计细节（我第一版做错过）：S-ACK **本来就该静默**，不能把它算进来，
+// 否则每一封回执都会触发提醒，噪音比问题本身更烦。
+// 真正该提醒的是「不该静默却静默了」：类型是 S-ACK 但正文写了实质内容。
+{
+  const mkIsolated = async (name) => {
+    const root = join(tmp, 'sender-banner-' + name)
+    await ensureWorkspaceBox(root)
+    return {
+      root,
+      box: createMailbox({
+        ackTimeoutMs: 600000,
+        cwdOf: async () => root,
+        cwds: async () => [root],
+        isArchived: async () => false,
+        log: () => {},
+        service: () => undefined,
+      }),
+    }
+  }
+
+  // ① 短 S-ACK：不该提示（回执本来就该静默）
+  {
+    const { box } = await mkIsolated('short-ack')
+    await box.send({
+      owner: 'ME', peer: 'P1', type: 'S-ACK', ackOf: 'M-20261120-9501', body: '收到',
+      senderSessionId: 'SME', peerSessionId: 'SP1', mailId: 'M-20261120-9502',
+    })
+    const banner = await box.stepBanner({ id: 'SME' })
+    check('短 S-ACK 不触发发信提醒（回执本就该静默）', banner === null, String(banner))
+  }
+
+  // ② 超长 S-ACK：该提示（使用方踩的那个失败）
+  {
+    const { box } = await mkIsolated('long-ack')
+    await box.send({
+      owner: 'ME', peer: 'P1', type: 'S-ACK', ackOf: 'M-20261120-9503', body: 'x'.repeat(700),
+      senderSessionId: 'SME', peerSessionId: 'SP1', mailId: 'M-20261120-9504',
+    })
+    const banner = await box.stepBanner({ id: 'SME' })
+    check(
+      '超长 S-ACK 触发发信提醒',
+      typeof banner === 'string' && /S-ACK 正文超过/.test(banner) && /mail_list/.test(banner),
+      String(banner),
+    )
+  }
+
+  // ③ 普通未读 + 超长 S-ACK：两种信息都要出现
+  {
+    const { box } = await mkIsolated('mixed')
+    await box.send({
+      owner: 'ME', peer: 'P1', type: 'S-ACK', ackOf: 'M-20261120-9505', body: 'x'.repeat(700),
+      senderSessionId: 'SME', peerSessionId: 'SP1', mailId: 'M-20261120-9506',
+    })
+    await box.send({
+      owner: 'P9', peer: 'ME', type: 'S-PROGRESS', body: 'hi',
+      senderSessionId: 'SP9', peerSessionId: 'SME', mailId: 'M-20261120-9507',
+    })
+    const banner = await box.stepBanner({ id: 'SME' })
+    check(
+      '有未读时也带上发信提醒',
+      typeof banner === 'string' && /开工检查/.test(banner) && /没读到|mail_list/.test(banner),
+      String(banner),
+    )
+  }
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
