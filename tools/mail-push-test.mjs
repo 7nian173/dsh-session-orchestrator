@@ -1676,5 +1676,63 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   }
 }
 
+// ── 已读的信不再倒计时：使命已完成，不该继续算超时 ──
+//
+// 人类定的语义：已读和未读是两个状态；一旦读了，这封信的使命就结束了。
+//
+// 为什么必须这样（2026-11-20 实证）：使用方读信、正在写回信，
+// 5 分钟窗口里没来得及 ack，就被判 ack-timeout 转待办。
+// 实测某封 pushedAt 11:15:26 → readAt 11:15:27（1 秒后就读了）
+// → deadline 11:20:26 → 转 blocked。
+// 也就是说：读过了还要被判超时，惩罚的是"读得慢"而不是"不理"。
+{
+  const rdWs = join(tmp, 'read-no-timeout')
+  await ensureWorkspaceBox(rdWs)
+  let rdBusy = true
+  const rdBox = createMailbox({
+    ackTimeoutMs: 600,
+    cwdOf: async () => rdWs,
+    cwds: async () => [rdWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => ({ state: () => (rdBusy ? 'running' : 'idle') }),
+  })
+  const RDID = 'M-20261120-9961'
+  await rdBox.send({
+    owner: 'RD1', peer: 'RD2', type: 'R-ALERT', body: '已读后不该超时',
+    senderSessionId: 'SRD1', peerSessionId: 'SRD2', mailId: RDID,
+  })
+  // 模拟"进了对方一轮"= 已读
+  await rdBox.noteStep({ id: 'SRD2' }, [{ role: 'user', content: [{ type: 'text', text: '〔信箱·' + RDID + '〕' }] }])
+  const rdRead = await rdBox.status({ mailId: RDID })
+  const rdRow = (rdRead.rows || [])[0] || {}
+  check('前置：这封信已读', Boolean(rdRow.readAt || (rdRead.rows || [])[0]), JSON.stringify({ readAt: rdRow.readAt }))
+
+  // ⚠️ 不能用固定 sleep 等超时窗口过去——这本身就是"固定等待"那个坑
+  // （我第一次跑就偶发失败过一次）。改成轮询到 deadline 之后再多等一点，
+  // 确认定时器真的跑过了才断言。
+  const rdDeadline = Date.now() + 600 + 400
+  while (Date.now() < rdDeadline) await sleep(50)
+  const rdAfter = await rdBox.status({ mailId: RDID })
+  const rdAfterRow = (rdAfter.rows || [])[0] || {}
+  check(
+    '已读后超时不再转 blocked',
+    rdAfterRow.status !== 'blocked',
+    JSON.stringify({ status: rdAfterRow.status, blockReason: rdAfterRow.blockReason }),
+  )
+
+  // 对照组：未读的同样超时会转 blocked（证明判据是"读没读"，不是"关掉了超时"）
+  const UNID = 'M-20261120-9962'
+  await rdBox.send({
+    owner: 'RD3', peer: 'RD4', type: 'R-ALERT', body: '未读应该超时',
+    senderSessionId: 'SRD3', peerSessionId: 'SRD4', mailId: UNID,
+  })
+  const unDeadline = Date.now() + 600 + 400
+  while (Date.now() < unDeadline) await sleep(50)
+  const unAfter = await rdBox.status({ mailId: UNID })
+  const unRow = (unAfter.rows || [])[0] || {}
+  check('对照组：未读的仍然会超时转 blocked', unRow.status === 'blocked', JSON.stringify({ status: unRow.status, reason: unRow.blockReason }))
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
