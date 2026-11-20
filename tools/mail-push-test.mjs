@@ -1835,12 +1835,37 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 
   // 关键：照建议填必须真的能发出去（否则建议是假的）
+  // 而且催收之后必须解锁——否则「出口」只是「能发一封催收」，通道仍然堵死。
   const followed = await poBox.send({
     owner: 'PO1', peer: 'PO2', type: 'S-TODO-NOTICE', body: '按建议催收',
     senderSessionId: 'SPO1', peerSessionId: 'SPO2', mailId: 'M-20261120-9953',
     ...sf,
   })
   check('照 suggestedFields 填能真的发出去（S-TODO-NOTICE 豁免背压）', followed.ok === true, JSON.stringify(followed.error && (followed.error.issues || followed.error.code)))
+
+  // 催收之后必须真的解锁，而不是「只能再发一封催收」
+  //
+  // 这是使用方 lead 指出的方案 A：出口应该是「我做过什么」（催过），
+  // 不是「等了多久」（30 分钟上限）。等待不需要对方任何行为，催收需要我主动做。
+  const afterReminder = await poBox.send({
+    owner: 'PO1', peer: 'PO2', type: 'R-ALERT', body: '催收后的新信',
+    senderSessionId: 'SPO1', peerSessionId: 'SPO2', mailId: 'M-20261120-9954',
+  })
+  check('催收过后允许发新信（出口生效）', afterReminder.ok === true, JSON.stringify(afterReminder.error && afterReminder.error.code))
+
+  // 但原信状态不能被翻篇——「允许发下一封」不等于「那笔债没了」
+  const orig = await poBox.status({ mailId: 'M-20261120-9951' })
+  const origRow = (orig.rows || [])[0] || {}
+  check('催收放行不改原信状态（仍是 delivered）', origRow.status === 'delivered', JSON.stringify({ status: origRow.status }))
+
+  // 催收信本身必须落盘 todoOf，否则上面的判据永远匹配不到
+  const poLetters = await readJson(join(poWs, '.dsh-mail', '_letters.json'))
+  const reminderLetter = (poLetters.letters || []).find((e) => e.id === 'M-20261120-9953')
+  check(
+    'S-TODO-NOTICE 的 todoOf 落盘（原来 meta 有、letter 没有）',
+    reminderLetter && reminderLetter.todoOf === 'M-20261120-9951',
+    JSON.stringify({ todoOf: reminderLetter && reminderLetter.todoOf }),
+  )
 }
 
 console.log(lines.join('\n'))
