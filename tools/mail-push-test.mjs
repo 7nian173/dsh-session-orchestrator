@@ -179,9 +179,28 @@ busy2 = true
 const expireCalls = chCalls.length
 const exp = await chBox.send(chMail('W', 'V', 'S31', 'S30', 'M-20261118-9002', 'S-EXPIRE', { expireOf: 'M-20261118-9001', reason: '任务已完成，无需处理' }))
 check('撤销信放行（背压豁免）', exp.ok === true && exp.status !== 'blocked', JSON.stringify(exp.error && exp.error.code))
-await sleep(80)
+// ⚠️ 原来固定 sleep(80) 等异步归档，实测偶发失败过一次
+// （toDir 读到 Processing 而不是 Expired）——固定等待的快慢假设不可靠。
+// 改成轮询到条件成立，超时才算失败。
+{
+  const deadline = Date.now() + 3000
+  let ready = null
+  while (Date.now() < deadline) {
+    const st = await chBox.status({ mailId: 'M-20261118-9001' })
+    const row = (st.rows || [])[0]
+    if (row && row.status === 'expired' && row.toDir === 'Expired' && row.fromDir === 'Expired') {
+      ready = row
+      break
+    }
+    await sleep(20)
+  }
+  check(
+    '原信转 expired（E）',
+    ready !== null,
+    ready ? JSON.stringify(ready.toPath) : '超时未转 expired',
+  )
+}
 const origNow = await chBox.status({ mailId: 'M-20261118-9001' })
-check('原信转 expired（E）', origNow.rows[0] && origNow.rows[0].status === 'expired', JSON.stringify(origNow.rows[0] && origNow.rows[0].toPath))
 check('过期信落到 Expired 目录而不是 Resolved', origNow.rows[0] && origNow.rows[0].toDir === 'Expired' && origNow.rows[0].fromDir === 'Expired', JSON.stringify({ to: origNow.rows[0] && origNow.rows[0].toDir, from: origNow.rows[0] && origNow.rows[0].fromDir }))
 const expCalls = chCalls.slice(expireCalls).filter((call) => /〔信箱·/.test(call.text))
 check('加急件绕过忙状态投出去', expCalls.length >= 1, JSON.stringify(expCalls.map((c) => c.text.slice(0, 18))))
@@ -1501,6 +1520,42 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   })
   const spEnv = await readFile(join(evWs, '.dsh-mail', 'envelope', 'M-20261120-9904.to.md'), 'utf8')
   check('非 R-* 类型无证据时不写 evidence 行', !/^evidence:/m.test(spEnv), (spEnv.match(/^evidence:.*$/m) || ['(无)'])[0])
+}
+
+// ── 回归：索引条目必须有 status 字段 ──
+// 使用方实测踩到：_index.json 里原本只有 type/from/to/sides，
+// **没有 status**。于是外面按它筛状态时：
+//   e.status === 'blocked'  → 永远 0 条（字段不存在）
+//   e.status !== 'done'     → 永远全集（undefined !== 'done' 为真）
+// **两个方向都错，而且都会返回结果** —— 最贵的那种形状。
+{
+  const ixWs = join(tmp, 'index-status')
+  await ensureWorkspaceBox(ixWs)
+  const ixBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => ixWs,
+    cwds: async () => [ixWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  const IXID = 'M-20261120-9951'
+  await ixBox.send({
+    owner: 'IX1', peer: 'IX2', type: 'S-PROGRESS', body: 'index status',
+    senderSessionId: 'SIX1', peerSessionId: 'SIX2', mailId: IXID,
+  })
+  const ixRaw = await readJson(join(ixWs, '.dsh-mail', '_index.json'))
+  const ixEntry = ixRaw[IXID] || {}
+  check('索引条目带 status 字段', typeof ixEntry.status === 'string' && ixEntry.status.length > 0, JSON.stringify({ status: ixEntry.status }))
+  check(
+    '索引 status 与信件本体一致',
+    ixEntry.status === (await readJson(join(ixWs, '.dsh-mail', '_letters.json'))).letters.find((e) => e.id === IXID).status,
+    JSON.stringify({ index: ixEntry.status }),
+  )
+  // 关键：按 status 筛必须真的能筛出东西（而不是永远 0 或永远全集）
+  const all = Object.values(ixRaw)
+  const byExact = all.filter((e) => e.status === 'pending').length + all.filter((e) => e.status === 'pushed').length
+  check('按 status 精确筛能得到结果（不是永远 0）', byExact > 0, String(byExact))
 }
 
 console.log(lines.join('\n'))
