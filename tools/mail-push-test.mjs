@@ -1578,5 +1578,68 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
   )
 }
 
+// ── 冷启动补齐索引 status：包括「孤儿索引」 ──
+// 使用方 lead 实测：298 条索引里 295 条无 status，`!=done` 筛出 297 条（全集）。
+// 全集和「真的有很多未结」长得一模一样，所以这不是「不准」而是「给出错的结论」。
+//
+// 为什么放在冷启动而不是外部脚本：updateIndex 是读改写、没有跨进程锁，
+// 外部脚本撞上插件正在写会互相覆盖。放在 sweepAtStart 里走 serialize 队列就没这问题。
+{
+  const bfWs = join(tmp, 'backfill-status')
+  await ensureWorkspaceBox(bfWs)
+  const bfBox = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => bfWs,
+    cwds: async () => [bfWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  // 造一封正常信，并手动把索引里的 status 删掉（模拟旧数据）
+  const BFID = 'M-20261120-9971'
+  await bfBox.send({
+    owner: 'BF1', peer: 'BF2', type: 'S-PROGRESS', body: 'backfill',
+    senderSessionId: 'SBF1', peerSessionId: 'SBF2', mailId: BFID,
+  })
+  const bfIndexPath = join(bfWs, '.dsh-mail', '_index.json')
+  const bfIdx = await readJson(bfIndexPath)
+  // 再加一条「孤儿索引」：本体不存在，但有 sides.code
+  bfIdx['M-20261120-9972'] = { type: 'S-PROGRESS', from: 'X', to: 'Y', sides: { from: { code: 'D', path: 'A>D' }, to: { code: 'D', path: 'P>D' } } }
+  delete bfIdx[BFID].status
+  await writeFile(bfIndexPath, JSON.stringify(bfIdx, null, 2), 'utf8')
+
+  const before = await readJson(bfIndexPath)
+  check('前置：两条都缺 status', before[BFID].status === undefined && before['M-20261120-9972'].status === undefined, JSON.stringify({ a: before[BFID].status, b: before['M-20261120-9972'].status }))
+
+  const bfBox2 = createMailbox({
+    ackTimeoutMs: 600000,
+    cwdOf: async () => bfWs,
+    cwds: async () => [bfWs],
+    isArchived: async () => false,
+    log: () => {},
+    service: () => undefined,
+  })
+  await bfBox2.status({}) // 触发 load
+  const sweep = await bfBox2.sweepAtStart()
+  check('冷启动补齐了 status', sweep.statusFilled >= 2, JSON.stringify({ statusFilled: sweep.statusFilled }))
+
+  const after = await readJson(bfIndexPath)
+  // 不能写死 'pushed'：这个测试环境没有 sessionController，信件实际停在 pending。
+  // 判据应该是「索引里的 status == 本体里的 status」，而不是某个具体值。
+  const bfLetters = await readJson(join(bfWs, '.dsh-mail', '_letters.json'))
+  const bfBody = (bfLetters.letters || []).find((e) => e.id === BFID)
+  check(
+    '正常信件的 status 照抄本体',
+    after[BFID].status === bfBody.status,
+    JSON.stringify({ index: after[BFID].status, letter: bfBody.status }),
+  )
+  check(
+    '孤儿索引按 sides.code 推出终态（两侧都 D → done）',
+    after['M-20261120-9972'].status === 'done',
+    String(after['M-20261120-9972'].status),
+  )
+  check('补齐后不再有 undefined', Object.values(after).every((e) => e.status !== undefined), String(Object.values(after).filter((e) => e.status === undefined).length))
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)
