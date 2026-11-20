@@ -1470,6 +1470,30 @@ check('合法 mail_id 正常收信', okId.ok === true && okId.mailId === 'M-2026
     JSON.stringify(shape && shape[1]),
   )
 
+  // ③b line 必须是正整数（使用方指出：Number('') === 0，会落成 line:0）
+  // 「看起来对」是今天那场事故的形状；line: 0 会显示出来但不指向任何位置。
+  await evBox.send({
+    owner: 'EV6', peer: 'EV2', type: 'R-ALERT', body: 'line 校验',
+    senderSessionId: 'SEV6', peerSessionId: 'SEV2', mailId: 'M-20261120-9905',
+    evidence: [
+      { path: 'empty.md', line: '' },
+      { path: 'null.md', line: null },
+      { path: 'zero.md', line: 0 },
+      { path: 'neg.md', line: -5 },
+      { path: 'good.md', line: 35 },
+    ],
+  })
+  const lineRaw = await readJson(join(evWs, '.dsh-mail', '_letters.json'))
+  const lineLetter = (lineRaw.letters || []).find((e) => e.id === 'M-20261120-9905')
+  const byPath = {}
+  for (const entry of (lineLetter && lineLetter.evidence) || []) byPath[entry.path] = entry.line
+  check(
+    'line 只接受正整数：空串/null/0/负数都变 null',
+    byPath['empty.md'] === null && byPath['null.md'] === null && byPath['zero.md'] === null && byPath['neg.md'] === null,
+    JSON.stringify(byPath),
+  )
+  check('line 正整数保留', byPath['good.md'] === 35, String(byPath['good.md']))
+
   // ④ 非 R-* 类型无证据时不写 none（避免噪音）
   await evBox.send({
     owner: 'EV5', peer: 'EV2', type: 'S-PROGRESS', body: '进度通知',
