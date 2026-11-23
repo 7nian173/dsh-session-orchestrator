@@ -1,7 +1,7 @@
 ---
 name: session-orchestrator
 description: "用会话编排插件（session-bridge）时的操作说明——人类说「建工作区」「注册好友」「给谁发信」「跳到某会话」时的正确做法、边界与措辞。只讲怎么用，不讲插件内部。"
-version: "0.3.2"
+version: "0.3.3"
 license: CC-BY-NC-4.0
 metadata:
   hermes:

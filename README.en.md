@@ -510,6 +510,7 @@ Both buttons are one-shot: once clicked they are gone, and a refresh does not br
 
 | Version | Date | Theme |
 |---|---|---|
+| `0.3.3` | 2026-11-24 | **Read letters no longer count down** (reading is itself "mission accomplished"); **sending a reminder unlocks new mail** (the exit depends on what I did, not how long I waited); **`S-TODO-NOTICE` no longer blocked at the tool layer** (the only exit from a deadlock); `codeFreshness` cache removed; `evidence` dedup; tool-layer schema test |
 | `0.3.2` | 2026-11-20 | **Fix cross-workspace duplicate copies (ack closed one side only, letters could never be closed)**; silent-drop is now discoverable; sender-side warning; `evidence` field; manual discoverability; time-slice banner |
 | `0.3.1` | 2026-11-19 | Slash commands (`/new-workspace`, `/register-me`, `/register-peer`), natural-language seeds, safety gates, preference memory, archive hygiene |
 | `0.3.0` | 2026-11-19 | Settings page, safety guards, agent guide, `@` friends, portability |
