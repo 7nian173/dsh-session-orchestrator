@@ -30,6 +30,8 @@ for (const file of ['lib/index.js', 'lib/mail.js', 'lib/client.js']) {
 }
 
 run('断言 mail-push-test', [join(root, 'tools/mail-push-test.mjs')])
+// 跨工作区门控：session_tell 与 mail_send（含 peerSessionId）必须走同一道门。
+run('断言 gate-test', [join(root, 'tools/gate-test.mjs')])
 // 授权窗口翻页：这段逻辑失效是静默的（长会话里人类自己的请求被门控拦掉），
 // 必须进自检，否则单靠 mail-push-test 全绿也发现不了。
 run('断言 permit-window-test', [join(root, 'tools/permit-window-test.mjs')])

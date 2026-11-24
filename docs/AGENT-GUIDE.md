@@ -451,6 +451,8 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 | `AGENT_CREATE_DISABLED` | 设置里禁止 agent **自主**新建会话 | **先读下面那个框。** 两种可能：① 人类确实没要求过 → 问人类；② 人类明确要求过但仍被拒 → **是设置级开关没开，别再问人类了，直接请人类改设置** |
 | `PRESET_REQUIRED` | 开了「先问预设」但没给预设 | 列出可用预设让人类挑，再重试 |
 
+> `CROSS_WORKSPACE_DISABLED` 的 `error.policy` 会带 `{ allowCrossWorkspace, instance }`：`instance=root` 是根实例，`instance=preset` 是预设自带实例。`mail_status` 也返回同样的 `policy`。门控对 `mail_send`（含 `peerSessionId`）与 `session_tell` 一致；跨区尝试会写 `cross-workspace.jsonl` 审计。
+
 > ### 「授权」与「设置」是两件不同的事
 >
 > `AGENT_CREATE_DISABLED` 有两种成因，处理方式**完全相反**：

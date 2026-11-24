@@ -439,6 +439,8 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 | `CONFIRM_REQUIRED` | Confirmation token invalid or expired | Send the first request again for a new token |
 | `AGENT_CREATE_DISABLED` | Settings forbid **self-initiated** session creation | **Read the box below first.** Two causes: ① the human never asked → ask them; ② the human did ask but you are still rejected → **a settings switch is off; stop asking the human and ask them to change the setting** |
 
+> `CROSS_WORKSPACE_DISABLED` carries `error.policy` with `{ allowCrossWorkspace, instance }`: `instance=root` is the root instance, `instance=preset` is the copy mounted by a preset. `mail_status` returns the same `policy`. The gate is identical for `mail_send` (including `peerSessionId`) and `session_tell`; every cross-workspace attempt is written to `cross-workspace.jsonl`.
+
 > ### "Authorisation" and "setting" are two different things
 >
 > `AGENT_CREATE_DISABLED` has two causes, and the correct action is **opposite**:

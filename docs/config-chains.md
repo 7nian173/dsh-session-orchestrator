@@ -132,6 +132,7 @@ configEditor.configuration()
 
 - 候选**只显示名字**（注册名 > 清洗后的标题 > 工作区名-尾号），不印完整 UUID
 - 候选范围受 `allowCrossWorkspace` 管：关着只看本工作区
+- 发信门控与候选同源：`session_tell` 与 `mail_send`（含 `peerSessionId`）都过同一道 `crossWorkspaceGate`；跨区尝试写 `cross-workspace.jsonl` 审计
 
 ### `/new-workspace <项目名> <目录>`
 
