@@ -347,6 +347,13 @@ const gated = (result) => codeOf(result) === 'AGENT_CREATE_DISABLED'
       shouldPass ? !gated(result) : gated(result),
       JSON.stringify({ code: codeOf(result) }),
     )
+    if (!shouldPass) {
+      check(
+        '场景11 拒绝消息回显授权句',
+        Boolean(result.error && String(result.error.message || '').includes('已授权可以建立新会话')),
+        String((result.error && result.error.message) || ''),
+      )
+    }
     await rm(root, { recursive: true, force: true })
   }
 }

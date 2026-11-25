@@ -437,7 +437,7 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 | `NO_MAILBOX` | Nobody registered in the target workspace | Have the peer `session_register_name` |
 | `PRESET_NOT_FOUND` | Preset id does not exist | Use a real preset id |
 | `CONFIRM_REQUIRED` | Confirmation token invalid or expired | Send the first request again for a new token |
-| `AGENT_CREATE_DISABLED` | Settings forbid **self-initiated** session creation | **Read the box below first.** Two causes: ① the human never asked → ask them; ② the human did ask but you are still rejected → **a settings switch is off; stop asking the human and ask them to change the setting** |
+| `AGENT_CREATE_DISABLED` | Settings forbid **self-initiated** session creation | The error echoes the authorisation sentence "已授权可以建立新会话": ask the human to say it in this conversation, then retry the same tool once (one-time permit; no setting change). If the human does not authorise it, ask them to change the setting |
 
 > `CROSS_WORKSPACE_DISABLED` carries `error.policy` with `{ allowCrossWorkspace, instance }`: `instance=root` is the root instance, `instance=preset` is the copy mounted by a preset. `mail_status` returns the same `policy`. The gate is identical for `mail_send` (including `peerSessionId`) and `session_tell`; every cross-workspace attempt is written to `cross-workspace.jsonl`.
 

@@ -448,7 +448,7 @@ pending ──推送──> pushed ──进了对方某一轮──> 自动 ack
 | `NO_MAILBOX` | 目标工作区没人注册过 | 让对方先 `session_register_name` |
 | `PRESET_NOT_FOUND` | 预设 id 不存在 | 用真实存在的预设 id |
 | `CONFIRM_REQUIRED` | 确认令牌无效/过期 | 重新发第一次请求拿新令牌 |
-| `AGENT_CREATE_DISABLED` | 设置里禁止 agent **自主**新建会话 | **先读下面那个框。** 两种可能：① 人类确实没要求过 → 问人类；② 人类明确要求过但仍被拒 → **是设置级开关没开，别再问人类了，直接请人类改设置** |
+| `AGENT_CREATE_DISABLED` | 设置里禁止 agent **自主**新建会话 | 报错会回显授权句「已授权可以建立新会话」：请人类在本会话说出这句，然后重试同一工具（一次性授权，不用改设置）。若人类不授权，再请他改设置 |
 | `PRESET_REQUIRED` | 开了「先问预设」但没给预设 | 列出可用预设让人类挑，再重试 |
 
 > `CROSS_WORKSPACE_DISABLED` 的 `error.policy` 会带 `{ allowCrossWorkspace, instance }`：`instance=root` 是根实例，`instance=preset` 是预设自带实例。`mail_status` 也返回同样的 `policy`。门控对 `mail_send`（含 `peerSessionId`）与 `session_tell` 一致；跨区尝试会写 `cross-workspace.jsonl` 审计。
