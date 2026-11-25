@@ -323,5 +323,45 @@ const gated = (result) => codeOf(result) === 'AGENT_CREATE_DISABLED'
   await rm(root, { recursive: true, force: true })
 }
 
+
+// ── 场景 11：人类明确说「已授权可以建立新会话」也能放行 ──
+// 旧逻辑只认「工作区」关键词；人类说「建立会话已授权」不会命中，agent 拿着
+// 同一句话去调 init_workspace/handoff 仍会被 AGENT_CREATE_DISABLED 挡住。
+{
+  const cases = [
+    ['已授权可以建立新会话', true],
+    ['建立会话已授权', true],
+    ['我授权你新建会话', true],
+    ['不要建立新会话', false],
+    ['不能新建会话', false],
+  ]
+  for (const [text, shouldPass] of cases) {
+    const records = []
+    for (let seq = 1; seq <= 300; seq += 1) {
+      records.push(seq === 20 ? humanEvent(20, text) : agentEvent(seq, 'x'))
+    }
+    const { root } = await start(records)
+    const result = await submit(root, 'session-phrase-' + shouldPass + '-' + Math.random().toString(36).slice(2, 6))
+    check(
+      '场景11 「' + text + '」' + (shouldPass ? ' 放行' : ' 拒绝'),
+      shouldPass ? !gated(result) : gated(result),
+      JSON.stringify({ code: codeOf(result) }),
+    )
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
+// ── 场景 12：agent 自己说「已授权可以建立新会话」不算 ──
+{
+  const records = []
+  for (let seq = 1; seq <= 300; seq += 1) {
+    records.push(seq === 20 ? agentEvent(20, '已授权可以建立新会话') : agentEvent(seq, 'x'))
+  }
+  const { root } = await start(records)
+  const result = await submit(root, 'session-agent-phrase')
+  check('场景12 agent 冒名的授权说法不放行', gated(result), JSON.stringify({ code: codeOf(result) }))
+  await rm(root, { recursive: true, force: true })
+}
+
 console.log(lines.join('\n'))
 process.exit(failed ? 1 : 0)

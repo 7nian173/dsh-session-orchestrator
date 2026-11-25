@@ -448,11 +448,10 @@ Refusals are `REFUSE_PROTECTED` / `REFUSE_ROOT`. **Do not try to work around the
 > | Cause | Symptom | Correct action |
 > |---|---|---|
 > | The human genuinely did not ask this turn | Rejected on the first call | Ask whether they want one |
-> | The human did ask, but the switch is off | **Rejected again and again no matter how many times you ask** | **Stop retrying; ask the human to change the setting** |
+> | The human only said "authorised" without an explicit action/object | **Rejected again and again no matter how many times you ask** | **Ask the human for a complete authorisation sentence, or change the setting** |
 >
 > **An explicit human request solves "willingness"; `allowAgentCreateSession` solves "capability".**
-> **Willingness does not change capability.** The human can say "authorised" a hundred times —
-> if the switch is off, you will be rejected a hundred times.
+> An explicit authorisation sentence (for example "已授权可以建立新会话", "建立会话已授权", "我授权你新建会话") is a **one-time** human permit for the current session; a bare "authorised" is not enough — it must contain create/new + session/workspace. The agent's own words never count.
 >
 > Measured (consumer, 2026-11-20): rejected → asked the human "authorise me" → human said "authorised"
 > → retry rejected → assumed "the authorisation was not clear enough" → asked again → rejected again
