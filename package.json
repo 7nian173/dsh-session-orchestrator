@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-orchestrator",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Session orchestration for DeepSeek Harness: create and hand off sessions, jump between them, write letters with receipts through a workspace mailbox, form session groups, and manage all of it from a settings page. Host half plus browser half.",
   "type": "module",
   "main": "lib/index.js",
