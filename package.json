@@ -20,6 +20,7 @@
     "docs/WHY-DISK.md",
     "tools/mail-push-test.mjs",
     "tools/gate-test.mjs",
+    "tools/_gate-test-body.mjs",
     "tools/permit-window-test.mjs",
     "tools/_permit-window-test-body.mjs",
     "tools/privacy-check.mjs",
